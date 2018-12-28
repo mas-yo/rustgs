@@ -1,0 +1,12 @@
+[package]
+name = "rustgs"
+version = "0.1.0"
+authors = ["Masahiro Yoshida <mypianoplayer@gmail.com>"]
+edition = "2015"
+
+[dependencies]
+tokio = "*"
+futures = "0.1.25"
+bytes = "0.4.11"
+diesel = { version = "1.3.3", features = ["mysql"] }
+dotenv = "0.13.0"
