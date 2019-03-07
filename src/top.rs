@@ -11,6 +11,7 @@ use crate::{
     get_db,
     command,
     database::*,
+    types::*,
 };
 
 type Peer = Framed<TcpStream,command::Codec>;
@@ -39,7 +40,7 @@ impl<F,I,E> Future for Which<F,I,E> where F: Future<Item=I,Error=E> {
     }
 }
 
-pub(crate) fn top(peer: Peer) -> impl Future<Item=(Peer,u32,u32),Error=()> {
+pub(crate) fn top(peer: Peer) -> impl Future<Item=(Peer,UserID,RoomCode),Error=()> {
 
     show_title(peer)
     .and_then(move|peer| {
@@ -148,17 +149,17 @@ fn wait_login_info(peer: Peer) -> impl Future<Item=(String,Peer),Error=()> {
     })
 }
 
-fn login(name: &str) -> impl Future<Item=(u32,u32),Error=()> {
+fn login(name: &str) -> impl Future<Item=(UserID,RoomCode),Error=()> {
 
     let name2 = name.to_string();
     let query = format!("SELECT id,room_code FROM users WHERE name='{}'", name);
     get_db().new_query(&query).map(move|row| {
         let (id,room_code):(u32,u32) = mysql::from_row(row);
-        (id,room_code)
+        (UserID::from(id), RoomCode::from(room_code))
     })
     .collect()
     .and_then(move|res|{
-        let mut room_code = 0;
+        let mut room_code = RoomCode::from(0);
         if res.is_empty() {
             Which{value:None, future:Some(new_user(&name2))}
         }
@@ -170,7 +171,7 @@ fn login(name: &str) -> impl Future<Item=(u32,u32),Error=()> {
     })
 }
 
-fn new_user(name: &str) -> impl Future<Item=u32,Error=()> {
+fn new_user(name: &str) -> impl Future<Item=UserID,Error=()> {
 
     let query = format!("INSERT INTO users SET name='{}';SELECT LAST_INSERT_ID()", name);
     get_db().new_query(&query).map(move|row| {
@@ -179,7 +180,7 @@ fn new_user(name: &str) -> impl Future<Item=u32,Error=()> {
     })
     .collect()
     .map(|res|{
-        res[0]
+        UserID::from(res[0])
     })
 }
 
