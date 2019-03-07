@@ -12,7 +12,6 @@ use futures::{
 // use diesel::MysqlConnection;
 // use diesel::connection::SimpleConnection;
 use dotenv::dotenv;
-use lazy_static::lazy_static;
 use mysql;
 
 pub type DBResult = mysql::Row;
@@ -31,6 +30,7 @@ pub type DBQuerySender = futures::sync::mpsc::Sender<(DBQuery,DBResultSender)>;
 
 pub fn start_database() -> (impl Future<Item=(),Error=()>,DBQuerySender) {
     let mysql = mysql::Pool::new_manual(1, 1, "mysql://rustgs:@localhost/rustgs").expect("db conn err");
+    println!("db connected");
     let (query_tx,query_rx) = mpsc::channel::<(DBQuery,mpsc::Sender<DBResult>)>(24);
 
     let task = query_rx.for_each(move|(query,result_tx)|{
@@ -64,13 +64,13 @@ pub fn start_database() -> (impl Future<Item=(),Error=()>,DBQuerySender) {
 // type ForEachDBResult = <futures::sync::mpsc::Receiver<DBResult> as Stream<Item=DBResult,Error=()>>::ForEach;
 
 pub(crate) trait NewQuery {
-    fn new_query(&self, query: &str) -> DBResultReceiver;
+    fn new_query<T:AsRef<str>>(&self, query: T) -> DBResultReceiver;
 }
 
 impl NewQuery for DBQuerySender {
-    fn new_query(&self, query: &str) -> DBResultReceiver {
+    fn new_query<T:AsRef<str>>(&self, query: T) -> DBResultReceiver {
         let (result_tx,result_rx) = mpsc::channel(1);
-        let query_task = self.clone().send((query.to_string(), result_tx)).map(|_|()).map_err(|_|());
+        let query_task = self.clone().send((query.as_ref().to_string(), result_tx)).map(|_|()).map_err(|_|());
         tokio::spawn(query_task);
         result_rx
     }
