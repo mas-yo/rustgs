@@ -33,6 +33,7 @@ use crate::{
     tasks::*,
     misc::*,
     top::*,
+    chat_room::*,
 };
 
 lazy_static! {
@@ -63,6 +64,10 @@ fn make_server() -> impl Future<Item=(),Error=()> {
 
         top(framed).and_then(|(peer, user_id,room_code)|{
             println!("login ok {},{}", user_id, room_code);
+
+            let chat_room = chat_room();
+            tokio::spawn(chat_room);
+
             Ok(())
             //TODO process user_id,room_code,peer
         })

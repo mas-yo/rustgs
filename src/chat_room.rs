@@ -19,6 +19,10 @@ pub(crate) struct ChatMessage {
     message: String,
 }
 
+pub(crate) fn chat_room() -> impl Future<Item=(),Error=()> {
+    Ok(()).into_future()
+}
+
 // pub(crate) fn chat_room(query_tx: DBQuerySender) -> (impl TokioFuture,RoomCommandSender) {
 
 //     //shiritori

@@ -16,7 +16,7 @@ use mysql;
 
 pub type DBResult = mysql::Row;
 pub type DBError = ();
-pub type DBQuery = String;
+pub type DBQuery = Vec<String>;
 
 pub type DBResultSender = futures::sync::mpsc::Sender<DBResult>;
 pub type DBResultReceiver  = futures::sync::mpsc::Receiver<DBResult>;
@@ -33,15 +33,17 @@ pub fn start_database() -> (impl Future<Item=(),Error=()>,DBQuerySender) {
     println!("db connected");
     let (query_tx,query_rx) = mpsc::channel::<(DBQuery,mpsc::Sender<DBResult>)>(24);
 
-    let task = query_rx.for_each(move|(query,result_tx)|{
+    let task = query_rx.for_each(move|(queries,result_tx)|{
 
-        for row in mysql.prep_exec(query,()).unwrap() {
-            // let value:String = mysql::from_row(row.unwrap());
-            // println!("selected value:{}", value);
-            // let result = vec![value];
-            let row = row.unwrap();
-            let send_task = result_tx.clone().send(row).map(|_|()).map_err(|_|());
-            tokio::spawn(send_task);
+        for query in queries {
+            for row in mysql.prep_exec(query,()).unwrap() {
+                // let value:String = mysql::from_row(row.unwrap());
+                // println!("selected value:{}", value);
+                // let result = vec![value];
+                let row = row.unwrap();
+                let send_task = result_tx.clone().send(row).map(|_|()).map_err(|_|());
+                tokio::spawn(send_task);
+            }
         }
 
         Ok(())
@@ -64,13 +66,14 @@ pub fn start_database() -> (impl Future<Item=(),Error=()>,DBQuerySender) {
 // type ForEachDBResult = <futures::sync::mpsc::Receiver<DBResult> as Stream<Item=DBResult,Error=()>>::ForEach;
 
 pub(crate) trait NewQuery {
-    fn new_query<T:AsRef<str>>(&self, query: T) -> DBResultReceiver;
+    fn new_query(&self, queries: Vec<String>) -> DBResultReceiver;
+    // fn new_query<T:AsRef<str>>
 }
 
 impl NewQuery for DBQuerySender {
-    fn new_query<T:AsRef<str>>(&self, query: T) -> DBResultReceiver {
+    fn new_query(&self, queries: Vec<String>) -> DBResultReceiver {
         let (result_tx,result_rx) = mpsc::channel(1);
-        let query_task = self.clone().send((query.as_ref().to_string(), result_tx)).map(|_|()).map_err(|_|());
+        let query_task = self.clone().send((queries, result_tx)).map(|_|()).map_err(|_|());
         tokio::spawn(query_task);
         result_rx
     }

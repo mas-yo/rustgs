@@ -7,9 +7,13 @@ use std::{
     fmt,
 };
 use futures::future::*;
+
+use tokio::net::{TcpStream};
+use tokio::codec::{Framed};
+
 use crate::{
     misc::*,
-    command::*,
+    command,
     room_command::*,
     sequence_map::*,
     peer,
@@ -46,8 +50,11 @@ pub(crate) struct RoomCodePhantom;
 pub(crate) type UserID = ID<u32,UserIDPhantom>;
 pub(crate) type RoomCode = ID<u32,RoomCodePhantom>;
 
-// pub(crate) type RoomCommandSender = std::sync::mpsc::SyncSender<RoomCommand>;
-// pub(crate) type RoomCommandReceiver = std::sync::mpsc::Receiver<RoomCommand>;
+pub(crate) type Peer = Framed<TcpStream,command::Codec>;
+
+pub(crate) type RoomCommandSender = std::sync::mpsc::SyncSender<RoomCommand>;
+pub(crate) type RoomCommandReceiver = std::sync::mpsc::Receiver<RoomCommand>;
+
 // pub(crate) type SharedPeers = peer::SharedPeers<Codec>;
 // pub(crate) type RoomPeersRx = peer::RoomPeersRx<Codec>;
 // pub(crate) type RoomPeersTx = peer::RoomPeersTx<Codec>;

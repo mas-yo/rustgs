@@ -3,8 +3,6 @@ use std::{
 };
 use futures::prelude::*;
 use tokio::prelude::*;
-use tokio::net::{TcpStream};
-use tokio::codec::{Framed};
 
 
 use crate::{
@@ -13,8 +11,6 @@ use crate::{
     database::*,
     types::*,
 };
-
-type Peer = Framed<TcpStream,command::Codec>;
 
 struct Which<F,I,E> where F: Future<Item=I,Error=E> {
     value: Option<F::Item>,
