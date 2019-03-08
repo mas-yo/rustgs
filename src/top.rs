@@ -169,8 +169,8 @@ fn login(name: &str) -> impl Future<Item=(UserID,RoomCode),Error=()> {
 
 fn new_user(name: &str) -> impl Future<Item=UserID,Error=()> {
 
-    let query = format!("INSERT INTO users SET name='{}';SELECT LAST_INSERT_ID()", name);
-    get_db().new_query(&query).map(move|row| {
+    let query = vec![format!("INSERT INTO users SET name='{}'", name), "SELECT LAST_INSERT_ID()".to_string()];
+    get_db().new_query_multi(query).map(move|row| {
         let id:u32 = mysql::from_row(row);
         id
     })

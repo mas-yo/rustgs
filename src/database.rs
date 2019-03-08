@@ -66,17 +66,20 @@ pub fn start_database() -> (impl Future<Item=(),Error=()>,DBQuerySender) {
 // type ForEachDBResult = <futures::sync::mpsc::Receiver<DBResult> as Stream<Item=DBResult,Error=()>>::ForEach;
 
 pub(crate) trait NewQuery {
-    fn new_query(&self, queries: Vec<String>) -> DBResultReceiver;
-    // fn new_query<T:AsRef<str>>
+    fn new_query_multi(&self, queries: Vec<String>) -> DBResultReceiver;
+    fn new_query<T:AsRef<str>>(&self, query: T) -> DBResultReceiver {
+        self.new_query_multi(vec![query.as_ref().to_string()])
+    }
 }
 
 impl NewQuery for DBQuerySender {
-    fn new_query(&self, queries: Vec<String>) -> DBResultReceiver {
+    fn new_query_multi(&self, queries: Vec<String>) -> DBResultReceiver {
         let (result_tx,result_rx) = mpsc::channel(1);
         let query_task = self.clone().send((queries, result_tx)).map(|_|()).map_err(|_|());
         tokio::spawn(query_task);
         result_rx
     }
+
 }
 // }
 
