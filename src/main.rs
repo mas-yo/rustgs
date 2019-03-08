@@ -63,8 +63,10 @@ fn make_server() -> impl Future<Item=(),Error=()> {
         let framed = Framed::new(socket, command::Codec::new());
 
         top(framed).and_then(|(peer, user_id,room_code)|{
-            println!("login ok {},{}", user_id, room_code);
-
+            match room_code {
+                Some(code) => { println!("login ok {},{}", user_id, code); },
+                None => { println!("login ok {}", user_id); }
+            }
             let chat_room = chat_room();
             tokio::spawn(chat_room);
 

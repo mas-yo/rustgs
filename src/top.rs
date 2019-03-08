@@ -36,7 +36,7 @@ impl<F,I,E> Future for Which<F,I,E> where F: Future<Item=I,Error=E> {
     }
 }
 
-pub(crate) fn top(peer: Peer) -> impl Future<Item=(Peer,UserID,RoomCode),Error=()> {
+pub(crate) fn top(peer: Peer) -> impl Future<Item=(Peer,UserID,Option<RoomCode>),Error=()> {
 
     show_title(peer)
     .and_then(move|peer| {
@@ -145,17 +145,20 @@ fn wait_login_info(peer: Peer) -> impl Future<Item=(String,Peer),Error=()> {
     })
 }
 
-fn login(name: &str) -> impl Future<Item=(UserID,RoomCode),Error=()> {
+fn login(name: &str) -> impl Future<Item=(UserID,Option<RoomCode>),Error=()> {
 
     let name2 = name.to_string();
     let query = format!("SELECT id,room_code FROM users WHERE name='{}'", name);
     get_db().new_query(&query).map(move|row| {
-        let (id,room_code):(u32,u32) = mysql::from_row(row);
-        (UserID::from(id), RoomCode::from(room_code))
+        let (id,room_code):(u32,Option<u32>) = mysql::from_row(row);
+        match room_code {
+            None => (UserID::from(id), None),
+            Some(code) => (UserID::from(id), Some(RoomCode::from(code)))
+        }
     })
     .collect()
     .and_then(move|res|{
-        let mut room_code = RoomCode::from(0);
+        let mut room_code = None;
         if res.is_empty() {
             Which{value:None, future:Some(new_user(&name2))}
         }
