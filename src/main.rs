@@ -41,7 +41,7 @@ use crate::{
     which::*,
 };
 
-static mut SERVER_ID: ServerID = new_server_id();
+static mut SERVER_ID: ServerID = default_server_id();
 
 pub(crate) fn get_server_id() -> ServerID {
     unsafe {
@@ -61,6 +61,12 @@ pub(crate) fn get_db() -> DBQuerySender {
     DB.read().unwrap().clone()
 }
 
+lazy_static! {
+    pub(crate) static ref ROOMS: ArcHashMap<RoomID,RoomCommandSender> = {
+        new_arc_hash_map()
+    };
+}
+
 fn new_room(room_code: RoomCode) -> impl Future<Item=RoomID,Error=()> {
     let query = vec![format!("INSERT INTO rooms SET code={},server_id={}", room_code, 1),"SELECT LAST_INSERT_ID()".to_string()];
     get_db().new_query_multi(query)
@@ -74,7 +80,7 @@ fn new_room(room_code: RoomCode) -> impl Future<Item=RoomID,Error=()> {
     })
 }
 
-fn find_room(room_code: RoomCode) -> impl Future<Item=RoomID,Error=()> {
+fn find_room(room_code: RoomCode) -> impl Future<Item=(RoomID,ServerID),Error=()> {
 
     get_db().new_query_multi(vec!["LOCK TABLES rooms WRITE".to_string(), format!("SELECT id,player_count,server_id FROM rooms WHERE code={}", room_code)])
     .map(move|row| {
@@ -83,13 +89,20 @@ fn find_room(room_code: RoomCode) -> impl Future<Item=RoomID,Error=()> {
     })
     .collect()
     .and_then(move|res|{
+        let mut server_id;
         if res.is_empty() {
+            server_id = get_server_id();
             Which::from_future(new_room(room_code))
         }
         else {
+            println!("{:?}", res);
             let min_count = res.iter().fold((RoomID::from(0),0u32,ServerID::from(0)),|a,b| (b.0,std::cmp::min(a.1,b.1),b.2) );
+            server_id = min_count.2;
             Which::from_value(min_count.0)
         }
+        .map(move|room_id|{
+            (room_id, server_id)
+        })
     })
     .then(move|res|{
         get_db().new_query("UNLOCK TABLES").collect()
@@ -165,8 +178,10 @@ fn make_server(addr: SocketAddr) -> impl Future<Item=(),Error=()> {
                 }
 
                 find_room(room_code)
-                .and_then(|room_id|{
-                    println!("room id {}", room_id);
+                .and_then(move|(room_id,server_id)|{
+                    println!("room id:{} server_id:{}", room_id, server_id);
+                    let room_tx = chat_room(room_id);
+                    room_tx.send(room_command::RoomCommand::Join(peer));
                     Ok(())
                 })
             })

@@ -1,6 +1,7 @@
 use core::marker::PhantomData;
 
 use std::{
+    hash::*,
     sync::Arc,
     sync::RwLock,
     collections::HashMap,
@@ -28,6 +29,8 @@ impl<V,F> PartialEq for ID<V,F> where V:PartialEq+Copy {
         self.value == other.value
     }
 }
+impl<V,F> Eq for ID<V,F> where V:PartialEq+Copy {}
+
 impl<V,F> From<V> for ID<V,F> where V:Copy{
     fn from(v: V) -> Self {
         Self {value:v, phantom: PhantomData}
@@ -45,8 +48,15 @@ impl<V,F> fmt::Display for ID<V,F> where V:fmt::Display+Copy {
     }
 }
 
-pub(crate) const fn new_server_id() -> ServerID {
-    ServerID{ value:0, phantom: PhantomData}
+impl<V,F> fmt::Debug for ID<V,F> where V:fmt::Debug+Copy {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self.value)
+    }
+}
+impl<V,F> Hash for ID<V,F> where V:Hash+Copy {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.value.hash(state);
+    }
 }
 
 pub(crate) struct UserIDPhantom;
@@ -57,6 +67,12 @@ pub(crate) type UserID = ID<u32,UserIDPhantom>;
 pub(crate) type RoomID = ID<u32,RoomIDPhantom>;
 pub(crate) type RoomCode = ID<u32,RoomCodePhantom>;
 pub(crate) type ServerID = ID<u32,ServerIDPhantom>;
+
+pub(crate) const fn default_server_id() -> ServerID {
+    ServerID{value:0, phantom: PhantomData}
+}
+
+
 
 pub(crate) type Peer = Framed<TcpStream,command::Codec>;
 
