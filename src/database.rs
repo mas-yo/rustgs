@@ -29,14 +29,15 @@ pub type DBQuerySender = futures::sync::mpsc::Sender<(DBQuery,DBResultSender)>;
 // }
 
 pub fn start_database() -> (impl Future<Item=(),Error=()>,DBQuerySender) {
-    let mysql = mysql::Pool::new_manual(1, 1, "mysql://rustgs:@localhost/rustgs").expect("db conn err");
+    let mut mysql = mysql::Conn::new("mysql://rustgs:@localhost/rustgs").expect("db conn err");
     println!("db connected");
     let (query_tx,query_rx) = mpsc::channel::<(DBQuery,mpsc::Sender<DBResult>)>(24);
 
     let task = query_rx.for_each(move|(queries,result_tx)|{
 
         for query in queries {
-            for row in mysql.prep_exec(query,()).unwrap() {
+            println!("DB QUERY: {}", query);
+            for row in mysql.query(query).unwrap() {
                 // let value:String = mysql::from_row(row.unwrap());
                 // println!("selected value:{}", value);
                 // let result = vec![value];

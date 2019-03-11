@@ -45,10 +45,18 @@ impl<V,F> fmt::Display for ID<V,F> where V:fmt::Display+Copy {
     }
 }
 
+pub(crate) const fn new_server_id() -> ServerID {
+    ServerID{ value:0, phantom: PhantomData}
+}
+
 pub(crate) struct UserIDPhantom;
+pub(crate) struct RoomIDPhantom;
 pub(crate) struct RoomCodePhantom;
+pub(crate) struct ServerIDPhantom;
 pub(crate) type UserID = ID<u32,UserIDPhantom>;
+pub(crate) type RoomID = ID<u32,RoomIDPhantom>;
 pub(crate) type RoomCode = ID<u32,RoomCodePhantom>;
+pub(crate) type ServerID = ID<u32,ServerIDPhantom>;
 
 pub(crate) type Peer = Framed<TcpStream,command::Codec>;
 

@@ -2,6 +2,9 @@ use std::{
     prelude::v1::*,
     sync::Arc,
     sync::RwLock,
+    net::{SocketAddr,ToSocketAddrs},
+    fmt::Display,
+    str::FromStr,
 };
 
 use tokio::net::{TcpListener,TcpStream};
@@ -25,6 +28,7 @@ mod types;
 mod tasks;
 mod chat_room;
 mod top;
+mod which;
 
 use crate::{
     database::*,
@@ -34,7 +38,16 @@ use crate::{
     misc::*,
     top::*,
     chat_room::*,
+    which::*,
 };
+
+static mut SERVER_ID: ServerID = new_server_id();
+
+pub(crate) fn get_server_id() -> ServerID {
+    unsafe {
+        SERVER_ID
+    }
+}
 
 lazy_static! {
   static ref DB: Arc<RwLock<DBQuerySender>> = {
@@ -48,44 +61,129 @@ pub(crate) fn get_db() -> DBQuerySender {
     DB.read().unwrap().clone()
 }
 
-fn make_server() -> impl Future<Item=(),Error=()> {
+fn new_room(room_code: RoomCode) -> impl Future<Item=RoomID,Error=()> {
+    let query = vec![format!("INSERT INTO rooms SET code={},server_id={}", room_code, 1),"SELECT LAST_INSERT_ID()".to_string()];
+    get_db().new_query_multi(query)
+    .map(move|row|{
+        let room_id:u32 = mysql::from_row(row);
+        RoomID::from(room_id)
+    })
+    .collect()
+    .and_then(|res|{
+        Ok(res[0])
+    })
+}
 
-    let addr = "127.0.0.1:18290".parse().unwrap();
-    let listener = TcpListener::bind(&addr).unwrap();
+fn find_room(room_code: RoomCode) -> impl Future<Item=RoomID,Error=()> {
 
-    let db = Ok(()).into_future().and_then(|_| get_db().new_query("SELECT 1").collect());
+    get_db().new_query_multi(vec!["LOCK TABLES rooms WRITE".to_string(), format!("SELECT id,player_count,server_id FROM rooms WHERE code={}", room_code)])
+    .map(move|row| {
+        let (room_id,count,server_id):(u32,u32,u32) = mysql::from_row(row);
+        (RoomID::from(room_id),count,ServerID::from(server_id))
+    })
+    .collect()
+    .and_then(move|res|{
+        if res.is_empty() {
+            Which::from_future(new_room(room_code))
+        }
+        else {
+            let min_count = res.iter().fold((RoomID::from(0),0u32,ServerID::from(0)),|a,b| (b.0,std::cmp::min(a.1,b.1),b.2) );
+            Which::from_value(min_count.0)
+        }
+    })
+    .then(move|res|{
+        get_db().new_query("UNLOCK TABLES").collect()
+        .and_then(move|_|res)
+    })
 
-    // let (lobby,room_tx) = make_lobby(query_tx.clone());
+    // Ok(RoomID::from(1)).into_future()
+}
 
-    let mut next_peer_id = 1;
-    let listener = listener.incoming().map_err(|_|()).for_each(move|socket| {
-        //ロビーの機能、ここに書いていいんじゃない
-        let framed = Framed::new(socket, command::Codec::new());
+fn new_server<T>(addr: &T) -> impl Future<Item=ServerID,Error=()> where T: Display {
+    let query = vec![format!("INSERT INTO servers SET address='{}'", addr),"SELECT LAST_INSERT_ID()".to_string()];
+    get_db().new_query_multi(query)
+    .map(move|row|{
+        let id:u32 = mysql::from_row(row);
+        ServerID::from(id)
+    })
+    .collect()
+    .and_then(|res|{
+        Ok(res[0])
+    })
+}
 
-        top(framed).and_then(|(peer, user_id,room_code)|{
-            match room_code {
-                Some(code) => { println!("login ok {},{}", user_id, code); },
-                None => { println!("login ok {}", user_id); }
-            }
-            let chat_room = chat_room();
-            tokio::spawn(chat_room);
+fn find_server_id<T>(addr: &T) -> impl Future<Item=ServerID,Error=()> where T: Display+Clone {
 
-            Ok(())
-            //TODO process user_id,room_code,peer
+    let query = format!("SELECT id FROM servers WHERE address='{}'", addr);
+    let addr2 = addr.clone();
+    get_db().new_query_multi(vec!["LOCK TABLES servers WRITE".to_string(), query])
+    .map(move|row|{
+        let id:u32 = mysql::from_row(row);
+        ServerID::from(id)
+    })
+    .collect()
+    .and_then(move|res|{
+        if res.is_empty() {
+            Which::from_future(new_server(&addr2))
+        }
+        else {
+            Which::from_value(res[0])
+        }
+    })
+    .then(move|res|{
+        get_db().new_query("UNLOCK TABLES").collect()
+        .and_then(move|_|res)
+    })
+
+    // Ok(ServerID::from(0)).into_future()
+}
+
+fn make_server(addr: SocketAddr) -> impl Future<Item=(),Error=()> {
+
+    find_server_id(&addr)
+    .and_then(move|server_id|{
+        unsafe{
+            SERVER_ID = ServerID::from(server_id);
+        }
+        let listener = TcpListener::bind(&addr).unwrap();
+
+        println!("server id: {}", get_server_id());
+
+        // let mut next_peer_id = 1;
+        listener.incoming().map_err(|_|()).for_each(move|socket| {
+            let framed = Framed::new(socket, command::Codec::new());
+
+            top(framed).and_then(|(peer, user_id,opt_room_code)|{
+
+                let mut room_code = RoomCode::from(1);
+                match opt_room_code {
+                    Some(code) => { 
+                        println!("login ok {},{}", user_id, code); 
+                        room_code = code;
+                    },
+                    None => { println!("login ok {}", user_id); }
+                }
+
+                find_room(room_code)
+                .and_then(|room_id|{
+                    println!("room id {}", room_id);
+                    Ok(())
+                })
+            })
+            .map(|_|())
         })
-
-        // room_tx.send(RoomCommand::Join((next_peer_id,framed)));
-        // next_peer_id += 1;
-//        Ok(())
-    });
-
-    listener.join(db).map(|_|())
+        .map(|_|())
+    })
 }
 
 fn main() { 
 
-    let server = make_server();
-
+    let server = Ok(()).into_future().and_then(|_|{
+        get_db().new_query("SELECT 1").collect()
+    })
+    .and_then(|_|{
+        make_server(SocketAddr::from_str("127.0.0.1:18290").unwrap())
+    });
     tokio::run(server);
 }
 

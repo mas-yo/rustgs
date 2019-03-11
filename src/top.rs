@@ -10,31 +10,8 @@ use crate::{
     command,
     database::*,
     types::*,
+    which::*,
 };
-
-struct Which<F,I,E> where F: Future<Item=I,Error=E> {
-    value: Option<F::Item>,
-    future: Option<F>,
-}
-impl<F,I,E> Future for Which<F,I,E> where F: Future<Item=I,Error=E> {
-    type Item = I;
-    type Error = E;
-    fn poll(&mut self) -> Poll<I,E> {
-        match &mut self.future {
-            Some(f) => {
-                f.poll()
-            }
-            None => {
-                if self.value.is_some() {
-                    Ok(Async::Ready(self.value.take().unwrap()))
-                }
-                else {
-                    Ok(Async::NotReady)
-                }
-            }
-        }
-    }
-}
 
 pub(crate) fn top(peer: Peer) -> impl Future<Item=(Peer,UserID,Option<RoomCode>),Error=()> {
 
@@ -158,13 +135,19 @@ fn login(name: &str) -> impl Future<Item=(UserID,Option<RoomCode>),Error=()> {
     })
     .collect()
     .and_then(move|res|{
+
+// 本当はテーブルロックしないといけないのでWhichは使えない
+// INSERT INTO `tags` (`tag`) VALUES ('myvalue1')
+//   ON DUPLICATE KEY UPDATE id=LAST_INSERT_ID(id), `tag`='myvalue1';
+// SELECT LAST_INSERT_ID();
+
         let mut room_code = None;
         if res.is_empty() {
-            Which{value:None, future:Some(new_user(&name2))}
+            Which::from_future(new_user(&name2))
         }
         else {
             room_code = res[0].1;
-            Which{value:Some(res[0].0), future:None}
+            Which::from_value(res[0].0)
         }
         .map(move|id| (id,room_code) )
     })
