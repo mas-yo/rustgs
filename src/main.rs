@@ -6,6 +6,7 @@ use std::{
     fmt::Display,
     str::FromStr,
 };
+use websocket::r#async::Server;
 
 use tokio::net::{TcpListener,TcpStream};
 use tokio::codec::{Framed};
@@ -151,6 +152,35 @@ fn find_server_id<T>(addr: &T) -> impl Future<Item=ServerID,Error=()> where T: D
     // Ok(ServerID::from(0)).into_future()
 }
 
+fn make_websock_server(addr: SocketAddr) -> impl Future<Item=(),Error=()> {
+    // use websocket::message::{Message, OwnedMessage};
+    // use websocket::server::InvalidConnection;
+
+    let handle = tokio::reactor::Handle::current();
+    let server = Server::bind(addr, &handle).unwrap();
+
+    server.incoming().map_err(|_|())
+    .for_each(move|(upgrade, addr)|{
+        // if !upgrade.protocols().iter().any(|s| s == "rust-websocket") {
+        //     tokio::spawn(upgrade.reject().map(|_|()).map_err(|_|()));
+        //     return Ok(())
+        // }
+
+        let f = upgrade.accept() //.use_protocol("rust-websocket").accept()
+        .and_then(move|(socket,a)|{
+            socket.send(websocket::message::Message::text("hello").into())
+        })
+        .map(|_|())
+        .map_err(|_|());
+
+        tokio::spawn(f);
+
+        Ok(())
+    })
+
+//    Ok(()).into_future()
+}
+
 fn make_server(addr: SocketAddr) -> impl Future<Item=(),Error=()> {
 
     find_server_id(&addr)
@@ -166,7 +196,7 @@ fn make_server(addr: SocketAddr) -> impl Future<Item=(),Error=()> {
         listener.incoming().map_err(|_|()).for_each(move|socket| {
             let framed = Framed::new(socket, command::Codec::new());
 
-            top(framed).and_then(|(peer, user_id,opt_room_code)|{
+            let top = top(framed).and_then(|(peer, user_id,opt_room_code)|{
 
                 let mut room_code = RoomCode::from(1);
                 match opt_room_code {
@@ -185,7 +215,10 @@ fn make_server(addr: SocketAddr) -> impl Future<Item=(),Error=()> {
                     Ok(())
                 })
             })
-            .map(|_|())
+            .map(|_|());
+
+            tokio::spawn(top);
+            Ok(())
         })
         .map(|_|())
     })
@@ -197,7 +230,8 @@ fn main() {
         get_db().new_query("SELECT 1").collect()
     })
     .and_then(|_|{
-        make_server(SocketAddr::from_str("127.0.0.1:18290").unwrap())
+        make_websock_server(SocketAddr::from_str("127.0.0.1:18290").unwrap())
+        // make_server(SocketAddr::from_str("127.0.0.1:18290").unwrap())
     });
     tokio::run(server);
 }
