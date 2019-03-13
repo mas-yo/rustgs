@@ -1,12 +1,9 @@
-use std::{
-    prelude::v1::*,
-    collections::HashMap,
-};
+use std::{collections::HashMap, prelude::v1::*};
 
 pub type SequenceID = u64;
 
 pub struct SequenceMap<V> {
-    map: HashMap<SequenceID,V>,
+    map: HashMap<SequenceID, V>,
     seq: SequenceID,
 }
 impl<V> SequenceMap<V> {

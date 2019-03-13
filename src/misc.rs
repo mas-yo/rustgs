@@ -1,16 +1,14 @@
-use std::{
-    collections::*,
-    sync::*,
-};
+use std::{collections::*, sync::*};
 
-use crate::{
-    sequence_map::*,
-};
+use crate::sequence_map::*;
 
-pub type ArcHashMap<K,V> = Arc<RwLock<HashMap<K,V>>>;
+pub type ArcHashMap<K, V> = Arc<RwLock<HashMap<K, V>>>;
 pub type ArcSequenceMap<V> = Arc<RwLock<SequenceMap<V>>>;
 
-pub(crate) fn new_arc_hash_map<K,V>() -> ArcHashMap<K,V> where K:std::cmp::Eq+std::hash::Hash {
+pub(crate) fn new_arc_hash_map<K, V>() -> ArcHashMap<K, V>
+where
+    K: std::cmp::Eq + std::hash::Hash,
+{
     Arc::new(RwLock::new(HashMap::new()))
 }
 
@@ -23,20 +21,31 @@ impl<T> WriteExpect<T> for RwLock<T> {
     }
 }
 
-pub(crate) trait LockInsert<K,V> {
+pub(crate) trait LockInsert<K, V> {
     fn lock_insert(&self, key: K, value: V) -> Option<V>;
 }
-impl<K,V> LockInsert<K,V> for RwLock<HashMap<K,V>> where K:std::cmp::Eq+std::hash::Hash {
+impl<K, V> LockInsert<K, V> for RwLock<HashMap<K, V>>
+where
+    K: std::cmp::Eq + std::hash::Hash,
+{
     fn lock_insert(&self, key: K, value: V) -> Option<V> {
         self.write_expect().insert(key, value)
     }
 }
 
-pub(crate) trait LockForEach<K,V> {
-    fn lock_for_each<F>(&self, f: F) where F:FnMut((& K,&mut V));
+pub(crate) trait LockForEach<K, V> {
+    fn lock_for_each<F>(&self, f: F)
+    where
+        F: FnMut((&K, &mut V));
 }
-impl<K,V> LockForEach<K,V> for RwLock<HashMap<K,V>> where K:std::cmp::Eq+std::hash::Hash {
-    fn lock_for_each<F>(&self, mut f: F) where F:FnMut((& K,&mut V)) {
+impl<K, V> LockForEach<K, V> for RwLock<HashMap<K, V>>
+where
+    K: std::cmp::Eq + std::hash::Hash,
+{
+    fn lock_for_each<F>(&self, mut f: F)
+    where
+        F: FnMut((&K, &mut V)),
+    {
         for elm in self.write_expect().iter_mut() {
             f(elm);
         }

@@ -1,21 +1,19 @@
+use futures::prelude::*;
 use std::sync::Arc;
 use std::sync::RwLock;
-use futures::prelude::*;
-
-
-use crate::{
-};
 
 pub(crate) trait Update {
     fn update(&mut self);
 }
 
 pub(crate) trait PushTask {
-    fn push_task<F>(&mut self, f: F) where F:'static + Future<Item=(),Error=()> + Send+Sync;
+    fn push_task<F>(&mut self, f: F)
+    where
+        F: 'static + Future<Item = (), Error = ()> + Send + Sync;
 }
 
 pub(crate) type SharedTasks = Arc<RwLock<Tasks>>;
-pub(crate) type Tasks = Vec<Box<dyn Future<Item=(),Error=()> + Send+Sync>>;
+pub(crate) type Tasks = Vec<Box<dyn Future<Item = (), Error = ()> + Send + Sync>>;
 
 pub(crate) fn new_tasks() -> Tasks {
     Vec::new()
@@ -30,8 +28,7 @@ impl Update for Tasks {
         while i != self.len() {
             if let Ok(Async::Ready(_)) = self[i].poll() {
                 self.remove(i);
-            }
-            else {
+            } else {
                 //TODO error
                 i += 1;
             }
@@ -40,7 +37,10 @@ impl Update for Tasks {
 }
 
 impl PushTask for Tasks {
-    fn push_task<F>(&mut self, f: F) where F:'static + Future<Item=(),Error=()> + Send+Sync{
+    fn push_task<F>(&mut self, f: F)
+    where
+        F: 'static + Future<Item = (), Error = ()> + Send + Sync,
+    {
         self.push(Box::new(f));
     }
 }

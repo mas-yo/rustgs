@@ -1,16 +1,13 @@
+use std::collections::HashMap;
 use std::prelude::v1::*;
 use std::sync::{Arc, RwLock};
-use std::collections::HashMap;
+use tokio::codec::{Decoder, Encoder, Framed};
+use tokio::net::{TcpListener, TcpStream};
 use tokio::prelude::*;
-use tokio::net::{TcpListener,TcpStream};
-use tokio::codec::{Decoder,Encoder,Framed};
 
-use futures::stream::{SplitStream,SplitSink};
+use futures::stream::{SplitSink, SplitStream};
 
-use crate::{
-    misc::*,
-    sequence_map::*,
-};
+use crate::{misc::*, sequence_map::*};
 
 // pub(crate) type PeerID = SequenceID;
 // pub(crate) type FramedStream<C> = Framed<TcpStream,C>;
@@ -41,4 +38,3 @@ use crate::{
 
 // pub type RoomPeersTx<C> = ArcHashMap<PeerID,SplitSink<FramedStream<C>>>;
 // pub type RoomPeersRx<C> = ArcHashMap<PeerID,SplitStream<FramedStream<C>>>;
-
