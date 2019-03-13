@@ -1,5 +1,6 @@
 use std::{
-    sync::{Arc,RwLock}
+    sync::{Arc,RwLock},
+    fmt::*,
 };
 use futures::prelude::*;
 use tokio::prelude::*;
@@ -13,7 +14,8 @@ use crate::{
     which::*,
 };
 
-pub(crate) fn top(peer: Peer) -> impl Future<Item=(Peer,UserID,Option<RoomCode>),Error=()> {
+pub(crate) fn top<S,E>(peer: S) -> impl Future<Item=(S,UserID,Option<RoomCode>),Error=()>
+    where S: Stream<Item=command::C2S,Error=E> + Sink<SinkItem=command::S2C,SinkError=E>, E:Display+Debug {
 
     show_title(peer)
     .and_then(move|peer| {
@@ -45,7 +47,8 @@ pub(crate) fn top(peer: Peer) -> impl Future<Item=(Peer,UserID,Option<RoomCode>)
     // })
 }
 
-fn show_title(peer: Peer) -> impl Future<Item=Peer,Error=()> {
+fn show_title<S,E>(peer: S) -> impl Future<Item=S,Error=()>
+    where S: Stream<Item=command::C2S,Error=E> + Sink<SinkItem=command::S2C,SinkError=E>, E:Display+Debug {
 
     peer.send(command::S2C::Message("TITLE".to_string()))
     .and_then(move|peer|{
@@ -98,7 +101,8 @@ fn show_information(peer: Peer) -> impl Future<Item=(),Error=()> {
     peer.send(command::S2C::Message("information: this is sample information".to_string())).map(|_|()).map_err(|_|())
 }
 
-fn wait_login_info(peer: Peer) -> impl Future<Item=(String,Peer),Error=()> {
+fn wait_login_info<S,E>(peer: S) -> impl Future<Item=(String,S),Error=()>
+    where S: Stream<Item=command::C2S,Error=E> + Sink<SinkItem=command::S2C,SinkError=E>, E:Display {
 
     peer.skip_while(move|cmd|{
         match cmd {

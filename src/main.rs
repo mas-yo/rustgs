@@ -6,7 +6,12 @@ use std::{
     fmt::Display,
     str::FromStr,
 };
-use websocket::r#async::Server;
+use websocket::{
+    r#async::Server,
+    codec::ws::MessageCodec,
+    message::OwnedMessage,
+    result::*,
+};
 
 use tokio::net::{TcpListener,TcpStream};
 use tokio::codec::{Framed};
@@ -152,6 +157,53 @@ fn find_server_id<T>(addr: &T) -> impl Future<Item=ServerID,Error=()> where T: D
     // Ok(ServerID::from(0)).into_future()
 }
 
+struct WsPeer {
+    framed: Framed<TcpStream,MessageCodec<OwnedMessage>>,
+}
+
+impl Stream for WsPeer {
+    type Item = command::C2S;
+    type Error = WebSocketError;
+    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+        match self.framed.poll() {
+            Ok(Async::Ready(Some(msg))) => {
+                if let OwnedMessage::Text(txt) = msg {
+                    return Ok(Async::Ready(Some(command::C2S::from_str(&txt).unwrap())))
+                }
+                else {
+                    Err(WebSocketError::ProtocolError("invalid data type"))
+                }
+            },
+            Ok(Async::Ready(None)) => Ok(Async::Ready(None)),
+            Ok(Async::NotReady) => Ok(Async::NotReady),
+            Err(e) => Err(e),
+        }
+    }
+}
+
+impl Sink for WsPeer {
+    type SinkItem = command::S2C;
+    type SinkError = WebSocketError;
+    fn start_send(&mut self, item: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
+        let s = item.to_string();
+        let cloned_item = item.clone();
+        self.framed.start_send(OwnedMessage::Text(s))
+        .map(move|asyncsink|{
+            match asyncsink {
+                AsyncSink::Ready => AsyncSink::Ready,
+                AsyncSink::NotReady(_) => {
+                    AsyncSink::NotReady(cloned_item)
+                }
+            }
+        })
+    }
+    fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
+        self.framed.poll_complete()
+        // Ok(Async::Ready(()))
+    }
+}
+
+
 fn make_websock_server(addr: SocketAddr) -> impl Future<Item=(),Error=()> {
     // use websocket::message::{Message, OwnedMessage};
     // use websocket::server::InvalidConnection;
@@ -165,14 +217,22 @@ fn make_websock_server(addr: SocketAddr) -> impl Future<Item=(),Error=()> {
         //     tokio::spawn(upgrade.reject().map(|_|()).map_err(|_|()));
         //     return Ok(())
         // }
+            // println!("client access");
 
         let f = upgrade.accept() //.use_protocol("rust-websocket").accept()
         .and_then(move|(socket,a)|{
-            socket.send(websocket::message::Message::text("hello").into())
+            println!("client connected");
+            let wspeer = WsPeer{framed:socket};
+            // wspeer.send(command::S2C::Message("hello".to_string()))
+            let top = top(wspeer)
+            .map(|_|());
+            tokio::spawn(top);
+            Ok(())
+            // .map(|_|())
+            // socket.send(websocket::message::Message::text("hello").into())
         })
         .map(|_|())
         .map_err(|_|());
-
         tokio::spawn(f);
 
         Ok(())
