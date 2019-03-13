@@ -74,10 +74,10 @@ pub(crate) const fn default_server_id() -> ServerID {
 
 
 
-pub(crate) type Peer = Framed<TcpStream,command::Codec>;
+pub(crate) type TcpPeer = Framed<TcpStream,command::Codec>;
 
-pub(crate) type RoomCommandSender = std::sync::mpsc::SyncSender<RoomCommand>;
-pub(crate) type RoomCommandReceiver = std::sync::mpsc::Receiver<RoomCommand>;
+pub(crate) type RoomCommandSender<S,E> = std::sync::mpsc::SyncSender<RoomCommand<S,E>>;
+pub(crate) type RoomCommandReceiver<S,E> = std::sync::mpsc::Receiver<RoomCommand<S,E>>;
 
 // pub(crate) type SharedPeers = peer::SharedPeers<Codec>;
 // pub(crate) type RoomPeersRx = peer::RoomPeersRx<Codec>;

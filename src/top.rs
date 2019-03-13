@@ -96,11 +96,6 @@ fn show_title<S,E>(peer: S) -> impl Future<Item=S,Error=()>
     .map_err(|_|())
 }
 
-fn show_information(peer: Peer) -> impl Future<Item=(),Error=()> {
-
-    peer.send(command::S2C::Message("information: this is sample information".to_string())).map(|_|()).map_err(|_|())
-}
-
 fn wait_login_info<S,E>(peer: S) -> impl Future<Item=(String,S),Error=()>
     where S: Stream<Item=command::C2S,Error=E> + Sink<SinkItem=command::S2C,SinkError=E>, E:Display {
 

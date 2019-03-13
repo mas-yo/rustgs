@@ -1,6 +1,7 @@
 use chrono::*;
 use std::{
-    collections::HashMap,    
+    collections::HashMap,
+    fmt::*,
 };
 use futures::prelude::*;
 
@@ -12,7 +13,6 @@ use crate::{
     types::*,
     tasks::*,
     misc::*,
-    ROOMS,
 };
 
 pub(crate) struct ChatMessage {
@@ -21,16 +21,24 @@ pub(crate) struct ChatMessage {
     message: String,
 }
 
-pub(crate) fn chat_room(room_id: RoomID) -> RoomCommandSender {
+pub(crate) fn chat_room_2<S,E>(room_id: RoomID) -> RoomCommandSender<S,E>
+    where S: Stream<Item=command::C2S,Error=E> + Sink<SinkItem=command::S2C,SinkError=E>, E:Display+Debug {
+    
+    let (tx,rx) = std::sync::mpsc::sync_channel(12);
+    tx.clone()
+}
 
-    let mut rooms = ROOMS.write().unwrap();
+pub(crate) fn chat_room<S,E>(room_id: RoomID) -> RoomCommandSender<S,E>
+    where S:'static+ Stream<Item=command::C2S,Error=E> + Sink<SinkItem=command::S2C,SinkError=E> + Send, E:'static +Display+Debug {
 
-    if let Some(tx) = rooms.get(&room_id) {
-        return tx.clone();
-    }
+    // let mut rooms = ROOMS.write().unwrap();
 
-    let (room_tx,room_rx) = std::sync::mpsc::sync_channel(12);
-    rooms.insert(room_id, room_tx.clone());
+    // if let Some(tx) = rooms.get(&room_id) {
+    //     return tx.clone();
+    // }
+
+    let (room_tx,room_rx) = std::sync::mpsc::sync_channel::<RoomCommand<S,E>>(12);
+//    rooms.insert(room_id, room_tx.clone());
 
     let mut next_peer_id = 0;
     let mut peer_txs = HashMap::new();
@@ -38,12 +46,13 @@ pub(crate) fn chat_room(room_id: RoomID) -> RoomCommandSender {
 
     let room = tokio::timer::Interval::new(std::time::Instant::now(), std::time::Duration::from_millis(100))
     .for_each(move|_|{
-        match (room_rx.try_recv()) {
+        match room_rx.try_recv() {
             Ok(RoomCommand::Join(peer)) => {
-                next_peer_id += 1;
+                println!("room id:{} peer:{} joined", room_id, next_peer_id);
                 let (tx,rx) = peer.split();
                 peer_txs.insert(next_peer_id, tx);
                 peer_rxs.insert(next_peer_id, rx);
+                next_peer_id += 1;
             },
             _ => {
             }
@@ -66,6 +75,7 @@ pub(crate) fn chat_room(room_id: RoomID) -> RoomCommandSender {
 
     tokio::spawn(room);
 
+    println!("room id {} created", room_id);
     room_tx
 //    Ok(()).into_future()
 }

@@ -62,6 +62,7 @@ impl ToString for S2C {
     }
 }
 
+#[derive(Default)]
 pub struct Codec {
     next_index: usize,
 }

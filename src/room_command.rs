@@ -1,5 +1,5 @@
-use tokio::net::{TcpStream};
-use tokio::codec::{Framed};
+use futures::prelude::*;
+use tokio::prelude::*;
 
 use crate::{
     types::*,
@@ -7,7 +7,9 @@ use crate::{
 };
 
 //#[derive(Debug)]
-pub(crate) enum RoomCommand {
+pub(crate) enum RoomCommand<S,E>
+    where S: Stream<Item=command::C2S,Error=E> + Sink<SinkItem=command::S2C,SinkError=E>
+ {
     // Join_(PeerID),
-    Join(Peer),
+    Join(S),
 }

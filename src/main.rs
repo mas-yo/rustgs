@@ -35,6 +35,7 @@ mod tasks;
 mod chat_room;
 mod top;
 mod which;
+mod listener;
 
 use crate::{
     database::*,
@@ -45,6 +46,7 @@ use crate::{
     top::*,
     chat_room::*,
     which::*,
+    listener::*,
 };
 
 static mut SERVER_ID: ServerID = default_server_id();
@@ -68,7 +70,12 @@ pub(crate) fn get_db() -> DBQuerySender {
 }
 
 lazy_static! {
-    pub(crate) static ref ROOMS: ArcHashMap<RoomID,RoomCommandSender> = {
+    pub(crate) static ref ROOMS_WS: ArcHashMap<RoomID,RoomCommandSender<WsPeer,WebSocketError>> = {
+        new_arc_hash_map()
+    };
+}
+lazy_static! {
+    pub(crate) static ref ROOMS_TCP: ArcHashMap<RoomID,RoomCommandSender<TcpPeer,std::io::Error>> = {
         new_arc_hash_map()
     };
 }
@@ -157,106 +164,25 @@ fn find_server_id<T>(addr: &T) -> impl Future<Item=ServerID,Error=()> where T: D
     // Ok(ServerID::from(0)).into_future()
 }
 
-struct WsPeer {
-    framed: Framed<TcpStream,MessageCodec<OwnedMessage>>,
-}
+fn main() { 
 
-impl Stream for WsPeer {
-    type Item = command::C2S;
-    type Error = WebSocketError;
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        match self.framed.poll() {
-            Ok(Async::Ready(Some(msg))) => {
-                if let OwnedMessage::Text(txt) = msg {
-                    return Ok(Async::Ready(Some(command::C2S::from_str(&txt).unwrap())))
-                }
-                else {
-                    Err(WebSocketError::ProtocolError("invalid data type"))
-                }
-            },
-            Ok(Async::Ready(None)) => Ok(Async::Ready(None)),
-            Ok(Async::NotReady) => Ok(Async::NotReady),
-            Err(e) => Err(e),
-        }
-    }
-}
+    let addr = SocketAddr::from_str("127.0.0.1:18290").unwrap();
 
-impl Sink for WsPeer {
-    type SinkItem = command::S2C;
-    type SinkError = WebSocketError;
-    fn start_send(&mut self, item: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
-        let s = item.to_string();
-        let cloned_item = item.clone();
-        self.framed.start_send(OwnedMessage::Text(s))
-        .map(move|asyncsink|{
-            match asyncsink {
-                AsyncSink::Ready => AsyncSink::Ready,
-                AsyncSink::NotReady(_) => {
-                    AsyncSink::NotReady(cloned_item)
-                }
-            }
-        })
-    }
-    fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
-        self.framed.poll_complete()
-        // Ok(Async::Ready(()))
-    }
-}
-
-
-fn make_websock_server(addr: SocketAddr) -> impl Future<Item=(),Error=()> {
-    // use websocket::message::{Message, OwnedMessage};
-    // use websocket::server::InvalidConnection;
-
-    let handle = tokio::reactor::Handle::current();
-    let server = Server::bind(addr, &handle).unwrap();
-
-    server.incoming().map_err(|_|())
-    .for_each(move|(upgrade, addr)|{
-        // if !upgrade.protocols().iter().any(|s| s == "rust-websocket") {
-        //     tokio::spawn(upgrade.reject().map(|_|()).map_err(|_|()));
-        //     return Ok(())
-        // }
-            // println!("client access");
-
-        let f = upgrade.accept() //.use_protocol("rust-websocket").accept()
-        .and_then(move|(socket,a)|{
-            println!("client connected");
-            let wspeer = WsPeer{framed:socket};
-            // wspeer.send(command::S2C::Message("hello".to_string()))
-            let top = top(wspeer)
-            .map(|_|());
-            tokio::spawn(top);
-            Ok(())
-            // .map(|_|())
-            // socket.send(websocket::message::Message::text("hello").into())
-        })
-        .map(|_|())
-        .map_err(|_|());
-        tokio::spawn(f);
-
-        Ok(())
+    let server = Ok(()).into_future().and_then(|_|{
+        get_db().new_query("SELECT 1").collect()
     })
-
-//    Ok(()).into_future()
-}
-
-fn make_server(addr: SocketAddr) -> impl Future<Item=(),Error=()> {
-
-    find_server_id(&addr)
+    .and_then(move|_|{
+        find_server_id(&addr)
+    })
     .and_then(move|server_id|{
         unsafe{
             SERVER_ID = ServerID::from(server_id);
         }
-        let listener = TcpListener::bind(&addr).unwrap();
-
-        println!("server id: {}", get_server_id());
-
-        // let mut next_peer_id = 1;
-        listener.incoming().map_err(|_|()).for_each(move|socket| {
-            let framed = Framed::new(socket, command::Codec::new());
-
-            let top = top(framed).and_then(|(peer, user_id,opt_room_code)|{
+        // make_tcpsocket_listener::<command::Codec>(&addr)
+        make_websocket_listener(&addr)
+        .for_each(|peer|{
+            let top = top(peer)
+            .and_then(|(peer, user_id,opt_room_code)|{
 
                 let mut room_code = RoomCode::from(1);
                 match opt_room_code {
@@ -270,28 +196,26 @@ fn make_server(addr: SocketAddr) -> impl Future<Item=(),Error=()> {
                 find_room(room_code)
                 .and_then(move|(room_id,server_id)|{
                     println!("room id:{} server_id:{}", room_id, server_id);
-                    let room_tx = chat_room(room_id);
+
+                    let mut rooms = ROOMS_WS.write().unwrap();
+                    // let mut rooms = ROOMS_TCP.write().unwrap();
+
+                    let room_tx;
+                    if let Some(tx) = rooms.get(&room_id) {
+                        room_tx = tx.clone();
+                    }
+                    else {
+                        room_tx = chat_room::<WsPeer,WebSocketError>(room_id);
+                        // room_tx = chat_room::<TcpPeer,std::io::Error>(room_id);
+                        rooms.insert(room_id, room_tx.clone());
+                    }
                     room_tx.send(room_command::RoomCommand::Join(peer));
                     Ok(())
                 })
-            })
-            .map(|_|());
-
+            })            .map(|_|());
             tokio::spawn(top);
             Ok(())
         })
-        .map(|_|())
-    })
-}
-
-fn main() { 
-
-    let server = Ok(()).into_future().and_then(|_|{
-        get_db().new_query("SELECT 1").collect()
-    })
-    .and_then(|_|{
-        make_websock_server(SocketAddr::from_str("127.0.0.1:18290").unwrap())
-        // make_server(SocketAddr::from_str("127.0.0.1:18290").unwrap())
     });
     tokio::run(server);
 }
