@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<title>RustGS</title>
+	</head>
+	<body>
+		<script>
+			var socket = new WebSocket("ws://127.0.0.1:18290");
+			socket.onmessage = function (event) {
+				var received = document.getElementById("received");
+				var br = document.createElement("BR");
+				var text = document.createTextNode(event.data);
+				received.appendChild(br);
+				received.appendChild(text);
+
+                var strs = event.data.split(',');
+                if (strs[0] == 'show_ui') {
+                    var ui = document.getElementById(strs[1]);
+                    ui.style.visibility = 'visible';
+                }
+                if (strs[0] == "request_login_info") {
+                    socket.send("response_login_info," + document.getElementById("user_name").value + ",");
+                }
+			};
+
+            function on_click(elm) {
+                socket.send("touch_ui," + elm.id);
+            }
+			
+			function send(element) {
+				var input = document.getElementById(element);
+				socket.send(input.value);
+				input.value = "";
+			}
+        </script>
+        
+        <div id="1" onclick='on_click(this)' style="visibility: hidden;">
+            <p>THIS IS TITLE SCREEN</p>
+        </div>
+			<p id="received">
+				<strong>Received Messages:</strong>
+			</p>
+			<form onsubmit="send('message'); return false">
+				<input type="text" id="message">
+				<input type="submit" value="Send">
+            </form>
+            <input type="text" id="user_name" value="aaaa">
+	</body>
+</html>
