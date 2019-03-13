@@ -12,10 +12,10 @@ use crate::{
     sequence_map::*,
 };
 
-pub(crate) type PeerID = SequenceID;
-pub(crate) type FramedStream<C> = Framed<TcpStream,C>;
+// pub(crate) type PeerID = SequenceID;
+// pub(crate) type FramedStream<C> = Framed<TcpStream,C>;
 
-pub(crate) type SharedPeers<C> = Arc<RwLock<SequenceMap<FramedStream<C>>>>;
+// pub(crate) type SharedPeers<C> = Arc<RwLock<SequenceMap<FramedStream<C>>>>;
 
 // pub(crate) struct SharedPeers<C: Decoder+Encoder> {
 //     peers: Arc<RwLock<SequenceMap<FramedStream<C>>>>,
@@ -39,6 +39,6 @@ pub(crate) type SharedPeers<C> = Arc<RwLock<SequenceMap<FramedStream<C>>>>;
 //     }
 // }
 
-pub type RoomPeersTx<C> = ArcHashMap<PeerID,SplitSink<FramedStream<C>>>;
-pub type RoomPeersRx<C> = ArcHashMap<PeerID,SplitStream<FramedStream<C>>>;
+// pub type RoomPeersTx<C> = ArcHashMap<PeerID,SplitSink<FramedStream<C>>>;
+// pub type RoomPeersRx<C> = ArcHashMap<PeerID,SplitStream<FramedStream<C>>>;
 

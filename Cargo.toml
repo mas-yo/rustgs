@@ -7,9 +7,11 @@ edition = "2018"
 [dependencies]
 tokio = "0.1.14"
 futures = "0.1.25"
+#futures-preview = "0.2.2"
 bytes = "0.4.11"
 diesel = { version = "1.3.3", features = ["mysql"] }
 dotenv = "0.13.0"
 lazy_static = "1.2.0"
 mysql = "15.0.0"
 chrono = "0.4.6"
+websocket = "0.22.3"

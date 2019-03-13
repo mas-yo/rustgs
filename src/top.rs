@@ -3,44 +3,17 @@ use std::{
 };
 use futures::prelude::*;
 use tokio::prelude::*;
-use tokio::net::{TcpStream};
-use tokio::codec::{Framed};
 
 
 use crate::{
+    get_db,
     command,
     database::*,
+    types::*,
+    which::*,
 };
 
-type Peer = Framed<TcpStream,command::Codec>;
-
-struct Which<F,I,E> where F: Future<Item=I,Error=E> {
-    value: Option<F::Item>,
-    future: Option<F>,
-}
-impl<F,I,E> Future for Which<F,I,E> where F: Future<Item=I,Error=E> {
-    type Item = I;
-    type Error = E;
-    fn poll(&mut self) -> Poll<I,E> {
-        match &mut self.future {
-            Some(f) => {
-                f.poll()
-            }
-            None => {
-                if self.value.is_some() {
-                    Ok(Async::Ready(self.value.take().unwrap()))
-                }
-                else {
-                    Ok(Async::NotReady)
-                }
-            }
-        }
-    }
-}
-
-pub(crate) fn top(peer: Peer, query_tx: DBQuerySender) -> impl Future<Item=(Peer,u32,u32),Error=()> {
-
-    let query_tx2 = query_tx.clone();
+pub(crate) fn top(peer: Peer) -> impl Future<Item=(Peer,UserID,Option<RoomCode>),Error=()> {
 
     show_title(peer)
     .and_then(move|peer| {
@@ -51,7 +24,7 @@ pub(crate) fn top(peer: Peer, query_tx: DBQuerySender) -> impl Future<Item=(Peer
         wait_login_info(peer)
     })
     .and_then(move|(name,peer)|{
-        login(query_tx, &name).map(|(user_id,room_code)|(peer,user_id,room_code))
+        login(&name).map(|(user_id,room_code)|(peer,user_id,room_code))
     })
     //.and_then {
     //  select join_room_queue, if user exists, send peer to room    
@@ -149,47 +122,55 @@ fn wait_login_info(peer: Peer) -> impl Future<Item=(String,Peer),Error=()> {
     })
 }
 
-fn login(query_tx: DBQuerySender, name: &str) -> impl Future<Item=(u32,u32),Error=()> {
+fn login(name: &str) -> impl Future<Item=(UserID,Option<RoomCode>),Error=()> {
 
     let name2 = name.to_string();
-    let query_tx2 = query_tx.clone();
     let query = format!("SELECT id,room_code FROM users WHERE name='{}'", name);
-    query_tx.new_query(&query).map(move|row| {
-        let (id,room_code):(u32,u32) = mysql::from_row(row);
-        (id,room_code)
+    get_db().new_query(&query).map(move|row| {
+        let (id,room_code):(u32,Option<u32>) = mysql::from_row(row);
+        match room_code {
+            None => (UserID::from(id), None),
+            Some(code) => (UserID::from(id), Some(RoomCode::from(code)))
+        }
     })
     .collect()
     .and_then(move|res|{
-        let mut room_code = 0;
+
+// 本当はテーブルロックしないといけないのでWhichは使えない
+// INSERT INTO `tags` (`tag`) VALUES ('myvalue1')
+//   ON DUPLICATE KEY UPDATE id=LAST_INSERT_ID(id), `tag`='myvalue1';
+// SELECT LAST_INSERT_ID();
+
+        let mut room_code = None;
         if res.is_empty() {
-            Which{value:None, future:Some(new_user(query_tx2, &name2))}
+            Which::from_future(new_user(&name2))
         }
         else {
             room_code = res[0].1;
-            Which{value:Some(res[0].0), future:None}
+            Which::from_value(res[0].0)
         }
         .map(move|id| (id,room_code) )
     })
 }
 
-fn new_user(query_tx: DBQuerySender, name: &str) -> impl Future<Item=u32,Error=()> {
+fn new_user(name: &str) -> impl Future<Item=UserID,Error=()> {
 
-    let query = format!("INSERT INTO users SET name='{}';SELECT LAST_INSERT_ID()", name);
-    query_tx.new_query(&query).map(move|row| {
+    let query = vec![format!("INSERT INTO users SET name='{}'", name), "SELECT LAST_INSERT_ID()".to_string()];
+    get_db().new_query_multi(query).map(move|row| {
         let id:u32 = mysql::from_row(row);
         id
     })
     .collect()
     .map(|res|{
-        res[0]
+        UserID::from(res[0])
     })
 }
 
-fn search_room(query_tx: DBQuerySender, room_code:u32) -> impl Future<Item=Option<(u32,u32)>, Error=()> {
+fn search_room(room_code:u32) -> impl Future<Item=Option<(u32,u32)>, Error=()> {
 
     //TODO find least load server
     let query = format!("SELECT id,server_id FROM rooms WHERE room_code={}", room_code);
-    query_tx.new_query(&query).map(move|row| {
+    get_db().new_query(&query).map(move|row| {
         let (room_id,server_id):(u32,u32) = mysql::from_row(row);
         (room_id,server_id)
     })

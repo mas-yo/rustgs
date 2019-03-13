@@ -13,6 +13,7 @@ pub(crate) type SessionToken = String;
 pub enum C2S {
     ResponseLoginInfo(String),
     TouchUI(UIID),
+    InputText(String),
 //    EnterRoom,
 }
 
@@ -65,6 +66,9 @@ impl Decoder for Codec {
                 }
                 if *cmd == "touch_ui" {
                     return Ok(Some(C2S::TouchUI(splitted.get(1).unwrap().parse::<UIID>().unwrap())));
+                }
+                if *cmd == "input_text" {
+                    return Ok(Some(C2S::InputText(splitted.get(1).unwrap().to_string())));
                 }
                 // if *cmd == "enter_room" {
                 //     return Ok(Some(C2S::EnterRoom));

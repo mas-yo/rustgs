@@ -1,6 +1,6 @@
 use chrono::*;
 use std::{
-    
+    collections::HashMap,    
 };
 use futures::prelude::*;
 
@@ -11,12 +11,63 @@ use crate::{
     room_command::*,
     types::*,
     tasks::*,
+    misc::*,
+    ROOMS,
 };
 
 pub(crate) struct ChatMessage {
     time: DateTime<Local>,
     name: String,
     message: String,
+}
+
+pub(crate) fn chat_room(room_id: RoomID) -> RoomCommandSender {
+
+    let mut rooms = ROOMS.write().unwrap();
+
+    if let Some(tx) = rooms.get(&room_id) {
+        return tx.clone();
+    }
+
+    let (room_tx,room_rx) = std::sync::mpsc::sync_channel(12);
+    rooms.insert(room_id, room_tx.clone());
+
+    let mut next_peer_id = 0;
+    let mut peer_txs = HashMap::new();
+    let mut peer_rxs = HashMap::new();
+
+    let room = tokio::timer::Interval::new(std::time::Instant::now(), std::time::Duration::from_millis(100))
+    .for_each(move|_|{
+        match (room_rx.try_recv()) {
+            Ok(RoomCommand::Join(peer)) => {
+                next_peer_id += 1;
+                let (tx,rx) = peer.split();
+                peer_txs.insert(next_peer_id, tx);
+                peer_rxs.insert(next_peer_id, rx);
+            },
+            _ => {
+            }
+        }
+
+        for (_,rx) in peer_rxs.iter_mut() {
+            match rx.poll() {
+                Ok(Async::Ready(Some(command::C2S::InputText(msg)))) => {
+                    for (_,tx) in peer_txs.iter_mut() {
+                        tx.send(command::S2C::Message(msg.clone())).wait();
+                    }
+                },
+                _ => {}
+            }
+        }
+
+        Ok(())
+    })
+    .map_err(|_|());
+
+    tokio::spawn(room);
+
+    room_tx
+//    Ok(()).into_future()
 }
 
 // pub(crate) fn chat_room(query_tx: DBQuerySender) -> (impl TokioFuture,RoomCommandSender) {

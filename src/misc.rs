@@ -10,6 +10,10 @@ use crate::{
 pub type ArcHashMap<K,V> = Arc<RwLock<HashMap<K,V>>>;
 pub type ArcSequenceMap<V> = Arc<RwLock<SequenceMap<V>>>;
 
+pub(crate) fn new_arc_hash_map<K,V>() -> ArcHashMap<K,V> where K:std::cmp::Eq+std::hash::Hash {
+    Arc::new(RwLock::new(HashMap::new()))
+}
+
 pub(crate) trait WriteExpect<T> {
     fn write_expect(&self) -> RwLockWriteGuard<T>;
 }
