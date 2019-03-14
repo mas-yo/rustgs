@@ -45,7 +45,8 @@ impl FromStr for C2S {
 pub enum S2C {
     RequestLoginInfo,
     Message(String),
-    ShowUI(UIID),
+    ShowUI(UIID,bool),
+    AddText(UIID,String),
 }
 
 impl ToString for S2C {
@@ -53,7 +54,8 @@ impl ToString for S2C {
         match self {
             S2C::RequestLoginInfo => "request_login_info".to_string(),
             S2C::Message(msg) => format!("> {}", msg),
-            S2C::ShowUI(ui_id) => format!("show_ui,{}", ui_id),
+            S2C::ShowUI(ui_id,show) => format!("show_ui,{},{}", ui_id, if *show {1} else {0}),
+            S2C::AddText(ui_id,text) => format!("add_text,{},{}", ui_id, text),
         }
     }
 }

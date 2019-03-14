@@ -43,8 +43,8 @@ where
     E: Display + Debug,
 {
     peer.send(command::S2C::Message("TITLE".to_string()))
-        .and_then(move |peer| peer.send(command::S2C::ShowUI(1)))
-        .and_then(move |peer| peer.send(command::S2C::ShowUI(2)))
+        .and_then(move |peer| peer.send(command::S2C::ShowUI(1,true)))
+        .and_then(move |peer| peer.send(command::S2C::ShowUI(1001,true)))
         .and_then(move |peer| {
             let (tx, rx) = peer.split();
             // make channel to send tx
@@ -81,6 +81,9 @@ where
                 let tx = locked.take().unwrap();
                 let peer = tx.reunite(rx.into_inner()).unwrap();
                 Ok(peer)
+            })
+            .and_then(move |peer|{
+                peer.send(command::S2C::ShowUI(1,false))
             })
         })
         .map_err(|_| ())

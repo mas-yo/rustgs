@@ -3,6 +3,11 @@
 	<head>
 		<meta charset="utf-8">
 		<title>RustGS</title>
+		<style>
+			.rustgs {
+				display: none;
+			}
+		</style>
 	</head>
 	<body>
 		<script>
@@ -17,8 +22,13 @@
                 var strs = event.data.split(',');
                 if (strs[0] == 'show_ui') {
                     var ui = document.getElementById(strs[1]);
-                    ui.style.visibility = 'visible';
+					if (strs[2] == '1') ui.style.display = 'inherit';
+					else ui.style.display = 'none';
                 }
+				if (strs[0] == 'add_text') {
+                    var ui = document.getElementById(strs[1]);
+					ui.value += strs[2] + '\n';
+				}
                 if (strs[0] == "request_login_info") {
                     socket.send("response_login_info," + document.getElementById("user_name").value + ",");
                 }
@@ -28,23 +38,32 @@
                 socket.send("touch_ui," + elm.id);
             }
 			
-			function send(element) {
+			function on_input(element) {
 				var input = document.getElementById(element);
-				socket.send(input.value);
+				socket.send("input_text," + input.value);
 				input.value = "";
 			}
         </script>
         
-        <div id="1" onclick='on_click(this)' style="visibility: hidden;">
-            <p>THIS IS TITLE SCREEN</p>
-        </div>
-			<p id="received">
-				<strong>Received Messages:</strong>
-			</p>
-			<form onsubmit="send('message'); return false">
-				<input type="text" id="message">
+        <div id="1" onclick='on_click(this)' class='rustgs'>
+			<p>THIS IS TITLE SCREEN</p>
+			<p>tap to start</p>
+			<button id="1001" onclick='on_click(this)'>information</button>
+		</div>
+		<div id="2" onclick='on_click(this)' class='rustgs'>
+			<textarea id='2001' rows=10 cols=80></textarea>
+			<form id='2002' onsubmit="on_input('2003'); return false">
+				<input type="text" id="2003">
 				<input type="submit" value="Send">
-            </form>
-            <input type="text" id="user_name" value="aaaa">
+			</form>
+		</div>
+		<p id="received">
+			<strong>Receved Miessages</strong>
+		</p>
+		<form onsubmit="send('message'); return false">
+			<input type="text" id="message">
+			<input type="submit" value="Send">
+		</form>
+		<input type="text" id="user_name" value="aaaa">
 	</body>
 </html>

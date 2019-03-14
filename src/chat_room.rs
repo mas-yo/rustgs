@@ -10,15 +10,6 @@ pub(crate) struct ChatMessage {
     message: String,
 }
 
-pub(crate) fn chat_room_2<S, E>(room_id: RoomID) -> RoomCommandSender<S, E>
-where
-    S: Stream<Item = command::C2S, Error = E> + Sink<SinkItem = command::S2C, SinkError = E>,
-    E: Display + Debug,
-{
-    let (tx, rx) = std::sync::mpsc::sync_channel(12);
-    tx.clone()
-}
-
 pub(crate) fn chat_room<S, E>(room_id: RoomID) -> RoomCommandSender<S, E>
 where
     S: 'static
@@ -49,6 +40,7 @@ where
             Ok(RoomCommand::Join(peer)) => {
                 println!("room id:{} peer:{} joined", room_id, next_peer_id);
                 let (tx, rx) = peer.split();
+                let tx = tx.send(command::S2C::ShowUI(2,true)).wait().unwrap();
                 peer_txs.insert(next_peer_id, tx);
                 peer_rxs.insert(next_peer_id, rx);
                 next_peer_id += 1;
@@ -60,7 +52,7 @@ where
             match rx.poll() {
                 Ok(Async::Ready(Some(command::C2S::InputText(msg)))) => {
                     for (_, tx) in peer_txs.iter_mut() {
-                        tx.send(command::S2C::Message(msg.clone())).wait();
+                        tx.send(command::S2C::AddText(2001, msg.clone())).wait();
                     }
                 }
                 _ => {}
