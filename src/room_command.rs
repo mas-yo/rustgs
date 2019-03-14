@@ -9,5 +9,5 @@ where
     S: Stream<Item = command::C2S, Error = E> + Sink<SinkItem = command::S2C, SinkError = E>,
 {
     // Join_(PeerID),
-    Join(S),
+    Join((S,String)),
 }

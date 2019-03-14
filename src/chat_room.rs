@@ -5,7 +5,6 @@ use std::{collections::HashMap, fmt::*};
 use crate::{command, database::*, misc::*, peer::*, room_command::*, tasks::*, types::*};
 
 pub(crate) struct ChatMessage {
-    time: DateTime<Local>,
     name: String,
     message: String,
 }
@@ -37,22 +36,23 @@ where
     )
     .for_each(move |_| {
         match room_rx.try_recv() {
-            Ok(RoomCommand::Join(peer)) => {
+            Ok(RoomCommand::Join((peer,name))) => {
                 println!("room id:{} peer:{} joined", room_id, next_peer_id);
                 let (tx, rx) = peer.split();
                 let tx = tx.send(command::S2C::ShowUI(2,true)).wait().unwrap();
                 peer_txs.insert(next_peer_id, tx);
-                peer_rxs.insert(next_peer_id, rx);
+                peer_rxs.insert(next_peer_id, (rx,name));
                 next_peer_id += 1;
             }
             _ => {}
         }
 
-        for (_, rx) in peer_rxs.iter_mut() {
+        for (_, (rx,name)) in peer_rxs.iter_mut() {
             match rx.poll() {
                 Ok(Async::Ready(Some(command::C2S::InputText(msg)))) => {
                     for (_, tx) in peer_txs.iter_mut() {
-                        tx.send(command::S2C::AddText(2001, msg.clone())).wait();
+                        let text = format!("{}: {}", name, msg);
+                        tx.send(command::S2C::AddText(2001, text)).wait();
                     }
                 }
                 _ => {}

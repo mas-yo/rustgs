@@ -178,7 +178,7 @@ fn main() {
             // make_tcpsocket_listener::<command::Codec>(&addr)
             make_websocket_listener(&addr).for_each(|peer| {
                 let top = top(peer)
-                    .and_then(|(peer, user_id, opt_room_code)| {
+                    .and_then(|(peer, user_id, name, opt_room_code)| {
                         let mut room_code = RoomCode::from(1);
                         match opt_room_code {
                             Some(code) => {
@@ -204,7 +204,7 @@ fn main() {
                                 // room_tx = chat_room::<TcpPeer,std::io::Error>(room_id);
                                 rooms.insert(room_id, room_tx.clone());
                             }
-                            room_tx.send(room_command::RoomCommand::Join(peer));
+                            room_tx.send(room_command::RoomCommand::Join((peer,name)));
                             Ok(())
                         })
                     })

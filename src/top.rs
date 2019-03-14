@@ -7,7 +7,7 @@ use tokio::prelude::*;
 
 use crate::{command, database::*, get_db, types::*, which::*};
 
-pub(crate) fn top<S, E>(peer: S) -> impl Future<Item = (S, UserID, Option<RoomCode>), Error = ()>
+pub(crate) fn top<S, E>(peer: S) -> impl Future<Item = (S, UserID, String, Option<RoomCode>), Error = ()>
 where
     S: Stream<Item = command::C2S, Error = E> + Sink<SinkItem = command::S2C, SinkError = E>,
     E: Display + Debug,
@@ -16,7 +16,7 @@ where
         .and_then(move |peer| peer.send(command::S2C::RequestLoginInfo).map_err(|_| ()))
         .and_then(move |peer| wait_login_info(peer))
         .and_then(move |(name, peer)| {
-            login(&name).map(|(user_id, room_code)| (peer, user_id, room_code))
+            login(&name).map(|(user_id, room_code)| (peer, user_id, name, room_code))
         })
     //.and_then {
     //  select join_room_queue, if user exists, send peer to room
@@ -53,21 +53,23 @@ where
             rx.skip_while(move |cmd| {
                 match cmd {
                     command::C2S::TouchUI(id) => {
-                        if *id == 1 {
+                        if *id == 1001 {
                             Ok(false)
                         //send tx via channel
-                        } else {
+                        } else if *id == 1002 {
                             let mut locked = shared_tx.write().unwrap();
                             if locked.is_some() {
                                 // let tx2 = locked.unwrap();
                                 let tx = locked.take().unwrap();
                                 let tx = tx
-                                    .send(command::S2C::Message("hellolo".to_string()))
+                                    .send(command::S2C::ShowUI(1003, true))
                                     .wait()
                                     .expect("send err");
                                 locked.replace(tx);
                                 // tokio::spawn(send);
                             }
+                            Ok(true)
+                        } else {
                             Ok(true)
                         }
                     }
