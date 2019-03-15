@@ -9,6 +9,42 @@ pub(crate) struct ChatMessage {
     message: String,
 }
 
+type CommandQueue = VecDeque<(CommandSeqID,Option<PeerID>,command::S2C)>;
+
+struct SendQueue<S,E> where S: Sink<SinkItem=command::S2C,SinkError=E> {
+    peer_tx: Arc<RwLock<S>>,
+    commands: VecDeque<command::S2C>,
+}
+
+impl<S,E> Future for SendQueue<S,E> where S: Sink<SinkItem=command::S2C,SinkError=E> {
+    type Item = ();
+    type Error = ();
+    fn poll(&mut self) -> Poll<Self::Item,Self::Error> {
+        let mut tx = self.peer_tx.write().unwrap();
+        loop {
+            match self.commands.front() {
+                None => {
+                    return Ok(Async::Ready(()));
+                },
+                Some(cmd) => {
+                    match tx.start_send(cmd.clone()) {
+                        Ok(AsyncSink::Ready) => {
+                            self.commands.pop_front();
+                        },
+                        Ok(AsyncSink::NotReady(_)) => {
+                            return Ok(Async::NotReady);
+                        },
+                        Err(_) => {
+                            return Err(());
+                        }
+                    }
+                }
+            }
+            //TODO poll_complete;
+        }
+    }
+}
+
 pub(crate) fn chat_room_async<S, E>(room_id: RoomID) -> RoomCommandAsyncSender<S, E>
 where
     S: 'static
