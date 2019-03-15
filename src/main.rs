@@ -56,6 +56,10 @@ lazy_static! {
         { new_arc_hash_map() };
 }
 lazy_static! {
+    pub(crate) static ref ROOMS_WS_ASYNC: ArcHashMap<RoomID, RoomCommandAsyncSender<WsPeer, WebSocketError>> =
+        { new_arc_hash_map() };
+}
+lazy_static! {
     pub(crate) static ref ROOMS_TCP: ArcHashMap<RoomID, RoomCommandSender<TcpPeer, std::io::Error>> =
         { new_arc_hash_map() };
 }
@@ -193,18 +197,22 @@ fn main() {
                         find_room(room_code).and_then(move |(room_id, server_id)| {
                             println!("room id:{} server_id:{}", room_id, server_id);
 
-                            let mut rooms = ROOMS_WS.write().unwrap();
+                            // let mut rooms = ROOMS_WS.write().unwrap();
                             // let mut rooms = ROOMS_TCP.write().unwrap();
+                            let mut rooms = ROOMS_WS_ASYNC.write().unwrap();
 
                             let room_tx;
                             if let Some(tx) = rooms.get(&room_id) {
                                 room_tx = tx.clone();
                             } else {
-                                room_tx = chat_room::<WsPeer, WebSocketError>(room_id);
+                                // room_tx = chat_room::<WsPeer, WebSocketError>(room_id);
                                 // room_tx = chat_room::<TcpPeer,std::io::Error>(room_id);
+                                room_tx = chat_room_2::<WsPeer, WebSocketError>(room_id);
                                 rooms.insert(room_id, room_tx.clone());
                             }
-                            room_tx.send(room_command::RoomCommand::Join((peer,name)));
+                            room_tx
+                                .send(room_command::RoomCommand::Join((peer, name)))
+                                .wait();
                             Ok(())
                         })
                     })
