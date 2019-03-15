@@ -9,7 +9,7 @@ pub(crate) struct ChatMessage {
     message: String,
 }
 
-pub(crate) fn chat_room_2<S, E>(room_id: RoomID) -> RoomCommandAsyncSender<S, E>
+pub(crate) fn chat_room_async<S, E>(room_id: RoomID) -> RoomCommandAsyncSender<S, E>
 where
     S: 'static
         + Stream<Item = command::C2S, Error = E>
@@ -88,11 +88,7 @@ where
         + Send,
     E: 'static + Display + Debug,
 {
-    // let mut rooms = ROOMS.write().unwrap();
-
-    // if let Some(tx) = rooms.get(&room_id) {
-    //     return tx.clone();
-    // }
+    let mut messages = VecDeque::<ChatMessage>::new();
 
     let (room_tx, room_rx) = std::sync::mpsc::sync_channel::<RoomCommand<S, E>>(12);
     //    rooms.insert(room_id, room_tx.clone());
@@ -111,6 +107,15 @@ where
                 println!("room id:{} peer:{} joined", room_id, next_peer_id);
                 let (tx, rx) = peer.split();
                 let tx = tx.send(command::S2C::ShowUI(2, true)).wait().unwrap();
+
+                let mut opt_tx = Some(tx);
+                for msg in messages.iter() {
+                    let text = format!("{}: {}", msg.name, msg.message);
+                    let tx = opt_tx.take().unwrap();
+                    opt_tx = Some(tx.send(command::S2C::AddText(2001, text)).wait().unwrap());
+                }
+                let tx = opt_tx.take().unwrap();
+
                 peer_txs.insert(next_peer_id, tx);
                 peer_rxs.insert(next_peer_id, (rx, name));
                 next_peer_id += 1;
@@ -121,6 +126,12 @@ where
         for (_, (rx, name)) in peer_rxs.iter_mut() {
             match rx.poll() {
                 Ok(Async::Ready(Some(command::C2S::InputText(msg)))) => {
+
+                    messages.push_back(ChatMessage{name: name.clone(),message:msg.clone()});
+                    if messages.len() > 100 {
+                        messages.pop_front();
+                    }
+
                     for (_, tx) in peer_txs.iter_mut() {
                         let text = format!("{}: {}", name, msg);
                         tx.send(command::S2C::AddText(2001, text)).wait();
