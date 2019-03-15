@@ -1,13 +1,5 @@
-use std::{
-    sync::{
-        Mutex,
-    },
-    thread,
-};
-use futures::{
-    prelude::*,
-    sync::mpsc,
-};
+use futures::{prelude::*, sync::mpsc};
+use std::{sync::Mutex, thread};
 // use diesel::prelude::*;
 // use diesel::MysqlConnection;
 // use diesel::connection::SimpleConnection;
@@ -19,22 +11,21 @@ pub type DBError = ();
 pub type DBQuery = Vec<String>;
 
 pub type DBResultSender = futures::sync::mpsc::Sender<DBResult>;
-pub type DBResultReceiver  = futures::sync::mpsc::Receiver<DBResult>;
-pub type DBQuerySender = futures::sync::mpsc::Sender<(DBQuery,DBResultSender)>;
+pub type DBResultReceiver = futures::sync::mpsc::Receiver<DBResult>;
+pub type DBQuerySender = futures::sync::mpsc::Sender<(DBQuery, DBResultSender)>;
 
-    // mysql.batch_execute("INSERT INTO users(id,name) VALUES(1,'test')").expect("exec err");
+// mysql.batch_execute("INSERT INTO users(id,name) VALUES(1,'test')").expect("exec err");
 
 // impl mysql_common::value::convert::FromValue for Vec<String> {
 
 // }
 
-pub fn start_database() -> (impl Future<Item=(),Error=()>,DBQuerySender) {
+pub fn start_database() -> (impl Future<Item = (), Error = ()>, DBQuerySender) {
     let mut mysql = mysql::Conn::new("mysql://rustgs:@localhost/rustgs").expect("db conn err");
     println!("db connected");
-    let (query_tx,query_rx) = mpsc::channel::<(DBQuery,mpsc::Sender<DBResult>)>(24);
+    let (query_tx, query_rx) = mpsc::channel::<(DBQuery, mpsc::Sender<DBResult>)>(24);
 
-    let task = query_rx.for_each(move|(queries,result_tx)|{
-
+    let task = query_rx.for_each(move |(queries, result_tx)| {
         for query in queries {
             println!("DB QUERY: {}", query);
             for row in mysql.query(query).unwrap() {
@@ -42,14 +33,14 @@ pub fn start_database() -> (impl Future<Item=(),Error=()>,DBQuerySender) {
                 // println!("selected value:{}", value);
                 // let result = vec![value];
                 let row = row.unwrap();
-                let send_task = result_tx.clone().send(row).map(|_|()).map_err(|_|());
+                let send_task = result_tx.clone().send(row).map(|_| ()).map_err(|_| ());
                 tokio::spawn(send_task);
             }
         }
 
         Ok(())
     });
-    (task,query_tx)
+    (task, query_tx)
 }
 
 // struct ReceiveDBResult {
@@ -68,19 +59,22 @@ pub fn start_database() -> (impl Future<Item=(),Error=()>,DBQuerySender) {
 
 pub(crate) trait NewQuery {
     fn new_query_multi(&self, queries: Vec<String>) -> DBResultReceiver;
-    fn new_query<T:AsRef<str>>(&self, query: T) -> DBResultReceiver {
+    fn new_query<T: AsRef<str>>(&self, query: T) -> DBResultReceiver {
         self.new_query_multi(vec![query.as_ref().to_string()])
     }
 }
 
 impl NewQuery for DBQuerySender {
     fn new_query_multi(&self, queries: Vec<String>) -> DBResultReceiver {
-        let (result_tx,result_rx) = mpsc::channel(1);
-        let query_task = self.clone().send((queries, result_tx)).map(|_|()).map_err(|_|());
+        let (result_tx, result_rx) = mpsc::channel(1);
+        let query_task = self
+            .clone()
+            .send((queries, result_tx))
+            .map(|_| ())
+            .map_err(|_| ());
         tokio::spawn(query_task);
         result_rx
     }
-
 }
 // }
 
@@ -90,15 +84,15 @@ impl NewQuery for DBQuerySender {
 //     result_rx
 // }
 
-    // {
-    //     let peers_tx2 = peers_tx.clone();
-    //     let db_result_task = result_rx.take(1).for_each(move|result|{
-    //         println!("result {:?}", result);
-    //         peers_tx2.lock_for_each(|(id,tx)|{
-    //             tx.start_send(command::S2C::Result_Login(result.get(0).unwrap().get(0).unwrap().clone()));
-    //             tx.poll_complete();
-    //         });
-    //         Ok(())
-    //     });
-    //     tasks.push(Box::new(db_result_task));
-    // }
+// {
+//     let peers_tx2 = peers_tx.clone();
+//     let db_result_task = result_rx.take(1).for_each(move|result|{
+//         println!("result {:?}", result);
+//         peers_tx2.lock_for_each(|(id,tx)|{
+//             tx.start_send(command::S2C::Result_Login(result.get(0).unwrap().get(0).unwrap().clone()));
+//             tx.poll_complete();
+//         });
+//         Ok(())
+//     });
+//     tasks.push(Box::new(db_result_task));
+// }

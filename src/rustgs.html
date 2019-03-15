@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<title>RustGS</title>
+	</head>
+	<body>
+		<script>
+			var socket = new WebSocket("ws://127.0.0.1:18290");
+			socket.onmessage = function (event) {
+				var debug = document.getElementById("debug");
+				debug.value += "<- " + event.data + "\n";
+
+                var strs = event.data.split(',');
+                if (strs[0] == 'show_ui') {
+                    var ui = document.getElementById(strs[1]);
+					if (strs[2] == '1') ui.style.display = 'inherit';
+					else ui.style.display = 'none';
+                }
+				if (strs[0] == 'add_text') {
+                    var ui = document.getElementById(strs[1]);
+					ui.value += strs[2] + '\n';
+				}
+                if (strs[0] == "request_login_info") {
+                    send("response_login_info," + document.getElementById("user_name").value + ",");
+                }
+			};
+
+            function on_click(elm) {
+                send("touch_ui," + elm.id);
+            }
+			
+			function on_input(element) {
+				var input = document.getElementById(element);
+				send("input_text," + input.value);
+				input.value = "";
+			}
+
+			function send(text) {
+				var debug = document.getElementById("debug");
+				debug.value += "-> " + text + "\n";
+				socket.send(text)
+			}
+        </script>
+        
+		<div id="1" onclick='on_click(this)' style='display:none; background-color:#f2c78c;'>
+			<br/>
+			<br/>
+			THIS IS TITLE SCREEN<br/>
+			<br/>
+			<div id='1001' onclick='on_click(this)'>tap to start</div><br/>
+			<br/>
+			<button id='1002' onclick='on_click(this)'>information</button>
+			<div id='1003' style='display:none;' onclick='this.style.display="none"'>!INFORMATION!</div>
+			<br/>
+			<br/>
+		</div>
+		<div id="2" onclick='on_click(this)' style='display:none;'>
+			<textarea id='2001' rows=10 cols=80></textarea>
+			<form id='2002' onsubmit="on_input('2003'); return false">
+				<input type="text" id="2003">
+				<input type="submit" value="Send">
+			</form>
+		</div>
+		user name: <input type="text" id="user_name" value="aaaa"><br/>
+		<br/>
+		<br/>
+		DEBUG:<br/>
+		<textarea id="debug" rows=20 cols=120 style='background-color:#c6c0c0;'></textarea>
+		<!-- <form onsubmit="send('message'); return false">
+			<input type="text" id="message">
+			<input type="submit" value="Send">
+		</form> -->
+	</body>
+</html>

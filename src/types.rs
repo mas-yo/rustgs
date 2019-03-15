@@ -1,59 +1,74 @@
 use core::marker::PhantomData;
 
-use std::{
-    hash::*,
-    sync::Arc,
-    sync::RwLock,
-    collections::HashMap,
-    fmt,
-};
 use futures::future::*;
+use std::{collections::HashMap, fmt, hash::*, sync::Arc, sync::RwLock};
 
-use tokio::net::{TcpStream};
-use tokio::codec::{Framed};
+use tokio::codec::Framed;
+use tokio::net::TcpStream;
 
-use crate::{
-    misc::*,
-    command,
-    room_command::*,
-    sequence_map::*,
-    peer,
-};
+use crate::{command, misc::*, peer, room_command::*, sequence_map::*};
 
-pub(crate) struct ID<V,F> where V:Copy {
+pub(crate) struct ID<V, F>
+where
+    V: Copy,
+{
     value: V,
     phantom: PhantomData<F>,
 }
-impl<V,F> PartialEq for ID<V,F> where V:PartialEq+Copy {
+impl<V, F> PartialEq for ID<V, F>
+where
+    V: PartialEq + Copy,
+{
     fn eq(&self, other: &Self) -> bool {
         self.value == other.value
     }
 }
-impl<V,F> Eq for ID<V,F> where V:PartialEq+Copy {}
+impl<V, F> Eq for ID<V, F> where V: PartialEq + Copy {}
 
-impl<V,F> From<V> for ID<V,F> where V:Copy{
+impl<V, F> From<V> for ID<V, F>
+where
+    V: Copy,
+{
     fn from(v: V) -> Self {
-        Self {value:v, phantom: PhantomData}
+        Self {
+            value: v,
+            phantom: PhantomData,
+        }
     }
 }
-impl<V,F> Copy for ID<V,F> where V:Copy {}
-impl<V,F> Clone for ID<V,F> where V:Copy+Clone {
+impl<V, F> Copy for ID<V, F> where V: Copy {}
+impl<V, F> Clone for ID<V, F>
+where
+    V: Copy + Clone,
+{
     fn clone(&self) -> Self {
-        Self { value: self.value.clone(), phantom: PhantomData}
+        Self {
+            value: self.value.clone(),
+            phantom: PhantomData,
+        }
     }
 }
-impl<V,F> fmt::Display for ID<V,F> where V:fmt::Display+Copy {
+impl<V, F> fmt::Display for ID<V, F>
+where
+    V: fmt::Display + Copy,
+{
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.value)
     }
 }
 
-impl<V,F> fmt::Debug for ID<V,F> where V:fmt::Debug+Copy {
+impl<V, F> fmt::Debug for ID<V, F>
+where
+    V: fmt::Debug + Copy,
+{
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self.value)
     }
 }
-impl<V,F> Hash for ID<V,F> where V:Hash+Copy {
+impl<V, F> Hash for ID<V, F>
+where
+    V: Hash + Copy,
+{
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.value.hash(state);
     }
@@ -63,21 +78,22 @@ pub(crate) struct UserIDPhantom;
 pub(crate) struct RoomIDPhantom;
 pub(crate) struct RoomCodePhantom;
 pub(crate) struct ServerIDPhantom;
-pub(crate) type UserID = ID<u32,UserIDPhantom>;
-pub(crate) type RoomID = ID<u32,RoomIDPhantom>;
-pub(crate) type RoomCode = ID<u32,RoomCodePhantom>;
-pub(crate) type ServerID = ID<u32,ServerIDPhantom>;
+pub(crate) type UserID = ID<u32, UserIDPhantom>;
+pub(crate) type RoomID = ID<u32, RoomIDPhantom>;
+pub(crate) type RoomCode = ID<u32, RoomCodePhantom>;
+pub(crate) type ServerID = ID<u32, ServerIDPhantom>;
 
 pub(crate) const fn default_server_id() -> ServerID {
-    ServerID{value:0, phantom: PhantomData}
+    ServerID {
+        value: 0,
+        phantom: PhantomData,
+    }
 }
 
+pub(crate) type TcpPeer = Framed<TcpStream, command::Codec>;
 
-
-pub(crate) type Peer = Framed<TcpStream,command::Codec>;
-
-pub(crate) type RoomCommandSender = std::sync::mpsc::SyncSender<RoomCommand>;
-pub(crate) type RoomCommandReceiver = std::sync::mpsc::Receiver<RoomCommand>;
+pub(crate) type RoomCommandSender<S, E> = std::sync::mpsc::SyncSender<RoomCommand<S, E>>;
+pub(crate) type RoomCommandReceiver<S, E> = std::sync::mpsc::Receiver<RoomCommand<S, E>>;
 
 // pub(crate) type SharedPeers = peer::SharedPeers<Codec>;
 // pub(crate) type RoomPeersRx = peer::RoomPeersRx<Codec>;

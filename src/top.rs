@@ -1,33 +1,25 @@
-use std::{
-    sync::{Arc,RwLock}
-};
 use futures::prelude::*;
+use std::{
+    fmt::*,
+    sync::{Arc, RwLock},
+};
 use tokio::prelude::*;
 
+use crate::{command, database::*, get_db, types::*, which::*};
 
-use crate::{
-    get_db,
-    command,
-    database::*,
-    types::*,
-    which::*,
-};
-
-pub(crate) fn top(peer: Peer) -> impl Future<Item=(Peer,UserID,Option<RoomCode>),Error=()> {
-
+pub(crate) fn top<S, E>(peer: S) -> impl Future<Item = (S, UserID, String, Option<RoomCode>), Error = ()>
+where
+    S: Stream<Item = command::C2S, Error = E> + Sink<SinkItem = command::S2C, SinkError = E>,
+    E: Display + Debug,
+{
     show_title(peer)
-    .and_then(move|peer| {
-        peer.send(command::S2C::RequestLoginInfo)
-        .map_err(|_|())
-    })
-    .and_then(move|peer|{
-        wait_login_info(peer)
-    })
-    .and_then(move|(name,peer)|{
-        login(&name).map(|(user_id,room_code)|(peer,user_id,room_code))
-    })
+        .and_then(move |peer| peer.send(command::S2C::RequestLoginInfo).map_err(|_| ()))
+        .and_then(move |peer| wait_login_info(peer))
+        .and_then(move |(name, peer)| {
+            login(&name).map(|(user_id, room_code)| (peer, user_id, name, room_code))
+        })
     //.and_then {
-    //  select join_room_queue, if user exists, send peer to room    
+    //  select join_room_queue, if user exists, send peer to room
     //}
     // .and_then(move|(user_id,room_code)|{
     //     search_room(query_tx2, room_code)
@@ -40,149 +32,146 @@ pub(crate) fn top(peer: Peer) -> impl Future<Item=(Peer,UserID,Option<RoomCode>)
     //               create room
     //         else
     //            insert_join_room_queue
-    //            send serverid to CL 
+    //            send serverid to CL
     // None => deside server to accept this client, insert_room, insert_join_room_queue
     // })
 }
 
-fn show_title(peer: Peer) -> impl Future<Item=Peer,Error=()> {
-
+fn show_title<S, E>(peer: S) -> impl Future<Item = S, Error = ()>
+where
+    S: Stream<Item = command::C2S, Error = E> + Sink<SinkItem = command::S2C, SinkError = E>,
+    E: Display + Debug,
+{
     peer.send(command::S2C::Message("TITLE".to_string()))
-    .and_then(move|peer|{
-        peer.send(command::S2C::ShowUI(1))
-    })
-    .and_then(move|peer|{
-        peer.send(command::S2C::ShowUI(2))
-    })
-    .and_then(move|peer|{
-        let (tx,rx) = peer.split();
-        // make channel to send tx
-        let shared_tx = Arc::new(RwLock::new(Some(tx)));
-        let shared_tx2 = shared_tx.clone();
-        rx.skip_while(move|cmd|{
-            match cmd {
-                command::C2S::TouchUI(id) => {
-                    if *id == 1 {
-                        Ok(false)
+        .and_then(move |peer| peer.send(command::S2C::ShowUI(1,true)))
+        .and_then(move |peer| peer.send(command::S2C::ShowUI(1001,true)))
+        .and_then(move |peer| {
+            let (tx, rx) = peer.split();
+            // make channel to send tx
+            let shared_tx = Arc::new(RwLock::new(Some(tx)));
+            let shared_tx2 = shared_tx.clone();
+            rx.skip_while(move |cmd| {
+                match cmd {
+                    command::C2S::TouchUI(id) => {
+                        if *id == 1001 {
+                            Ok(false)
                         //send tx via channel
-                    }
-                    else {
-                        let mut locked = shared_tx.write().unwrap();
-                        if locked.is_some() {
-                            // let tx2 = locked.unwrap();
-                            let tx = locked.take().unwrap();
-                            let tx = tx.send(command::S2C::Message("hellolo".to_string())).wait().expect("send err");
-                            locked.replace(tx);
-                            // tokio::spawn(send);
+                        } else if *id == 1002 {
+                            let mut locked = shared_tx.write().unwrap();
+                            if locked.is_some() {
+                                // let tx2 = locked.unwrap();
+                                let tx = locked.take().unwrap();
+                                let tx = tx
+                                    .send(command::S2C::ShowUI(1003, true))
+                                    .wait()
+                                    .expect("send err");
+                                locked.replace(tx);
+                                // tokio::spawn(send);
+                            }
+                            Ok(true)
+                        } else {
+                            Ok(true)
                         }
-                        Ok(true)
                     }
-                },
-                _ => Ok(true)
-            }
+                    _ => Ok(true),
+                }
+            })
+            .into_future()
+            .map_err(|(e, s)| e)
+            .and_then(move |(_cmd, rx)| {
+                let mut locked = shared_tx2.write().unwrap();
+                let tx = locked.take().unwrap();
+                let peer = tx.reunite(rx.into_inner()).unwrap();
+                Ok(peer)
+            })
+            .and_then(move |peer|{
+                peer.send(command::S2C::ShowUI(1,false))
+            })
         })
-        .into_future()
-        .map_err(|(e,s)|e)
-        .and_then(move|(_cmd,rx)|{
-            let mut locked = shared_tx2.write().unwrap();
-            let tx = locked.take().unwrap();
-            let peer = tx.reunite(rx.into_inner()).unwrap();
-            Ok(peer)
-        })
-    })
-    .map_err(|_|())
+        .map_err(|_| ())
 }
 
-fn show_information(peer: Peer) -> impl Future<Item=(),Error=()> {
-
-    peer.send(command::S2C::Message("information: this is sample information".to_string())).map(|_|()).map_err(|_|())
-}
-
-fn wait_login_info(peer: Peer) -> impl Future<Item=(String,Peer),Error=()> {
-
-    peer.skip_while(move|cmd|{
-        match cmd {
-            command::C2S::ResponseLoginInfo(_) => {
-                return Ok(false);
-            }
-            _ => {
-                Ok(true)
-            }
+fn wait_login_info<S, E>(peer: S) -> impl Future<Item = (String, S), Error = ()>
+where
+    S: Stream<Item = command::C2S, Error = E> + Sink<SinkItem = command::S2C, SinkError = E>,
+    E: Display,
+{
+    peer.skip_while(move |cmd| match cmd {
+        command::C2S::ResponseLoginInfo(_) => {
+            return Ok(false);
         }
+        _ => Ok(true),
     })
     .into_future()
-    .map_err(|_|())
-    .and_then(|(cmd,skipwhile)|{
+    .map_err(|_| ())
+    .and_then(|(cmd, skipwhile)| {
         if let Some(command::C2S::ResponseLoginInfo(name)) = cmd {
-            Ok((name,skipwhile.into_inner()))
-        }
-        else {
+            Ok((name, skipwhile.into_inner()))
+        } else {
             Err(())
         }
     })
 }
 
-fn login(name: &str) -> impl Future<Item=(UserID,Option<RoomCode>),Error=()> {
-
+fn login(name: &str) -> impl Future<Item = (UserID, Option<RoomCode>), Error = ()> {
     let name2 = name.to_string();
     let query = format!("SELECT id,room_code FROM users WHERE name='{}'", name);
-    get_db().new_query(&query).map(move|row| {
-        let (id,room_code):(u32,Option<u32>) = mysql::from_row(row);
-        match room_code {
-            None => (UserID::from(id), None),
-            Some(code) => (UserID::from(id), Some(RoomCode::from(code)))
-        }
-    })
-    .collect()
-    .and_then(move|res|{
+    get_db()
+        .new_query(&query)
+        .map(move |row| {
+            let (id, room_code): (u32, Option<u32>) = mysql::from_row(row);
+            match room_code {
+                None => (UserID::from(id), None),
+                Some(code) => (UserID::from(id), Some(RoomCode::from(code))),
+            }
+        })
+        .collect()
+        .and_then(move |res| {
+            // 本当はテーブルロックしないといけないのでWhichは使えない
+            // INSERT INTO `tags` (`tag`) VALUES ('myvalue1')
+            //   ON DUPLICATE KEY UPDATE id=LAST_INSERT_ID(id), `tag`='myvalue1';
+            // SELECT LAST_INSERT_ID();
 
-// 本当はテーブルロックしないといけないのでWhichは使えない
-// INSERT INTO `tags` (`tag`) VALUES ('myvalue1')
-//   ON DUPLICATE KEY UPDATE id=LAST_INSERT_ID(id), `tag`='myvalue1';
-// SELECT LAST_INSERT_ID();
-
-        let mut room_code = None;
-        if res.is_empty() {
-            Which::from_future(new_user(&name2))
-        }
-        else {
-            room_code = res[0].1;
-            Which::from_value(res[0].0)
-        }
-        .map(move|id| (id,room_code) )
-    })
+            let mut room_code = None;
+            if res.is_empty() {
+                Which::from_future(new_user(&name2))
+            } else {
+                room_code = res[0].1;
+                Which::from_value(res[0].0)
+            }
+            .map(move |id| (id, room_code))
+        })
 }
 
-fn new_user(name: &str) -> impl Future<Item=UserID,Error=()> {
-
-    let query = vec![format!("INSERT INTO users SET name='{}'", name), "SELECT LAST_INSERT_ID()".to_string()];
-    get_db().new_query_multi(query).map(move|row| {
-        let id:u32 = mysql::from_row(row);
-        id
-    })
-    .collect()
-    .map(|res|{
-        UserID::from(res[0])
-    })
+fn new_user(name: &str) -> impl Future<Item = UserID, Error = ()> {
+    let query = vec![
+        format!("INSERT INTO users SET name='{}'", name),
+        "SELECT LAST_INSERT_ID()".to_string(),
+    ];
+    get_db()
+        .new_query_multi(query)
+        .map(move |row| {
+            let id: u32 = mysql::from_row(row);
+            id
+        })
+        .collect()
+        .map(|res| UserID::from(res[0]))
 }
 
-fn search_room(room_code:u32) -> impl Future<Item=Option<(u32,u32)>, Error=()> {
-
+fn search_room(room_code: u32) -> impl Future<Item = Option<(u32, u32)>, Error = ()> {
     //TODO find least load server
-    let query = format!("SELECT id,server_id FROM rooms WHERE room_code={}", room_code);
-    get_db().new_query(&query).map(move|row| {
-        let (room_id,server_id):(u32,u32) = mysql::from_row(row);
-        (room_id,server_id)
-    })
-    .collect()
-    .map(|res|{
-        if res.is_empty() {
-            None
-        }
-        else {
-            Some(res[0])
-        }
-    })
+    let query = format!(
+        "SELECT id,server_id FROM rooms WHERE room_code={}",
+        room_code
+    );
+    get_db()
+        .new_query(&query)
+        .map(move |row| {
+            let (room_id, server_id): (u32, u32) = mysql::from_row(row);
+            (room_id, server_id)
+        })
+        .collect()
+        .map(|res| if res.is_empty() { None } else { Some(res[0]) })
 }
 
 // fn insert_join_room_queue(query_tx: DBQuerySender, room_id:u32, user_id:u32) {
@@ -201,4 +190,3 @@ fn search_room(room_code:u32) -> impl Future<Item=Option<(u32,u32)>, Error=()> {
 //     //insert/update rooms set server
 //     //insert join_room_queue
 // }
-
