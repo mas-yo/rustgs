@@ -179,8 +179,8 @@ fn main() {
             unsafe {
                 SERVER_ID = ServerID::from(server_id);
             }
-            // make_tcpsocket_listener::<command::Codec>(&addr)
-            make_websocket_listener(&addr).for_each(|peer| {
+            make_tcpsocket_listener::<command::Codec>(&addr).for_each(|peer| {
+                // make_websocket_listener(&addr).for_each(|peer| {
                 let top = top(peer)
                     .and_then(|(peer, user_id, name, opt_room_code)| {
                         let mut room_code = RoomCode::from(1);
@@ -197,22 +197,21 @@ fn main() {
                         find_room(room_code).and_then(move |(room_id, server_id)| {
                             println!("room id:{} server_id:{}", room_id, server_id);
 
-                            let mut rooms = ROOMS_WS.write().unwrap();
-                            // let mut rooms = ROOMS_TCP.write().unwrap();
+                            // let mut rooms = ROOMS_WS.write().unwrap();
+                            let mut rooms = ROOMS_TCP.write().unwrap();
                             // let mut rooms = ROOMS_WS_ASYNC.write().unwrap();
 
                             let room_tx;
                             if let Some(tx) = rooms.get(&room_id) {
                                 room_tx = tx.clone();
                             } else {
-                                room_tx = chat_room::<WsPeer, WebSocketError>(room_id);
-                                // room_tx = chat_room::<TcpPeer,std::io::Error>(room_id);
+                                // room_tx = chat_room::<WsPeer, WebSocketError>(room_id);
+                                room_tx = chat_room::<TcpPeer, std::io::Error>(room_id);
                                 // room_tx = chat_room_async::<WsPeer, WebSocketError>(room_id);
                                 rooms.insert(room_id, room_tx.clone());
                             }
-                            room_tx
-                                .send(room_command::RoomCommand::Join((peer, name)));
-                                // .wait();
+                            room_tx.send(room_command::RoomCommand::Join((peer, name)));
+                            // .wait();
                             Ok(())
                         })
                     })

@@ -9,36 +9,40 @@ pub(crate) struct ChatMessage {
     message: String,
 }
 
-type CommandQueue = VecDeque<(CommandSeqID,Option<PeerID>,command::S2C)>;
+type CommandQueue = VecDeque<(CommandSeqID, Option<PeerID>, command::S2C)>;
 
-struct SendQueue<S,E> where S: Sink<SinkItem=command::S2C,SinkError=E> {
+struct SendQueue<S, E>
+where
+    S: Sink<SinkItem = command::S2C, SinkError = E>,
+{
     peer_tx: Arc<RwLock<S>>,
     commands: VecDeque<command::S2C>,
 }
 
-impl<S,E> Future for SendQueue<S,E> where S: Sink<SinkItem=command::S2C,SinkError=E> {
+impl<S, E> Future for SendQueue<S, E>
+where
+    S: Sink<SinkItem = command::S2C, SinkError = E>,
+{
     type Item = ();
     type Error = ();
-    fn poll(&mut self) -> Poll<Self::Item,Self::Error> {
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         let mut tx = self.peer_tx.write().unwrap();
         loop {
             match self.commands.front() {
                 None => {
                     return Ok(Async::Ready(()));
-                },
-                Some(cmd) => {
-                    match tx.start_send(cmd.clone()) {
-                        Ok(AsyncSink::Ready) => {
-                            self.commands.pop_front();
-                        },
-                        Ok(AsyncSink::NotReady(_)) => {
-                            return Ok(Async::NotReady);
-                        },
-                        Err(_) => {
-                            return Err(());
-                        }
-                    }
                 }
+                Some(cmd) => match tx.start_send(cmd.clone()) {
+                    Ok(AsyncSink::Ready) => {
+                        self.commands.pop_front();
+                    }
+                    Ok(AsyncSink::NotReady(_)) => {
+                        return Ok(Async::NotReady);
+                    }
+                    Err(_) => {
+                        return Err(());
+                    }
+                },
             }
             //TODO poll_complete;
         }
@@ -132,12 +136,13 @@ where
     let mut next_peer_id = 0;
     let mut peer_txs = HashMap::new();
     let mut peer_rxs = HashMap::new();
+    let mut room_started = false;
 
     let room = tokio::timer::Interval::new(
         std::time::Instant::now(),
         std::time::Duration::from_millis(100),
     )
-    .for_each(move |_| {
+    .skip_while(move |_| {
         match room_rx.try_recv() {
             Ok(RoomCommand::Join((peer, name))) => {
                 println!("room id:{} peer:{} joined", room_id, next_peer_id);
@@ -155,15 +160,20 @@ where
                 peer_txs.insert(next_peer_id, tx);
                 peer_rxs.insert(next_peer_id, (rx, name));
                 next_peer_id += 1;
+                room_started = true;
             }
             _ => {}
         }
 
-        for (_, (rx, name)) in peer_rxs.iter_mut() {
+        let mut remove_peers = Vec::new();
+
+        for (peer_id, (rx, name)) in peer_rxs.iter_mut() {
             match rx.poll() {
                 Ok(Async::Ready(Some(command::C2S::InputText(msg)))) => {
-
-                    messages.push_back(ChatMessage{name: name.clone(),message:msg.clone()});
+                    messages.push_back(ChatMessage {
+                        name: name.clone(),
+                        message: msg.clone(),
+                    });
                     if messages.len() > 100 {
                         messages.pop_front();
                     }
@@ -173,12 +183,26 @@ where
                         tx.send(command::S2C::AddText(2001, text)).wait();
                     }
                 }
+                Ok(Async::Ready(None)) => {
+                    remove_peers.push(peer_id.clone());
+                }
                 _ => {}
             }
         }
 
-        Ok(())
+        for id in remove_peers {
+            peer_txs.remove(&id);
+            peer_rxs.remove(&id);
+        }
+
+        if room_started && peer_rxs.len() == 0 {
+            println!("room id {} closed", room_id);
+            Ok(false)
+        } else {
+            Ok(true)
+        }
     })
+    .for_each(|_| Ok(()))
     .map_err(|_| ());
 
     tokio::spawn(room);
