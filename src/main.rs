@@ -5,6 +5,7 @@ use std::{
     str::FromStr,
     sync::Arc,
     sync::RwLock,
+    env,
 };
 use websocket::{codec::ws::MessageCodec, message::OwnedMessage, r#async::Server, result::*};
 
@@ -27,6 +28,7 @@ mod tasks;
 mod top;
 mod types;
 mod which;
+//mod room;
 
 use crate::{
     chat_room::*, database::*, listener::*, misc::*, room_command::*, tasks::*, top::*, types::*,
@@ -53,6 +55,10 @@ pub(crate) fn get_db() -> DBQuerySender {
 
 lazy_static! {
     pub(crate) static ref ROOMS_WS: ArcHashMap<RoomID, RoomCommandSender<WsPeer, WebSocketError>> =
+        { new_arc_hash_map() };
+}
+lazy_static! {
+    pub(crate) static ref ROOMS_WS_ASYNC: ArcHashMap<RoomID, RoomCommandAsyncSender<WsPeer, WebSocketError>> =
         { new_arc_hash_map() };
 }
 lazy_static! {
@@ -165,7 +171,8 @@ where
 }
 
 fn main() {
-    let addr = SocketAddr::from_str("127.0.0.1:18290").unwrap();
+    let args: Vec<String> = env::args().collect();
+    let addr = SocketAddr::from_str(&format!("{}:18290", args[1])).unwrap();
 
     let server = Ok(())
         .into_future()
@@ -175,8 +182,8 @@ fn main() {
             unsafe {
                 SERVER_ID = ServerID::from(server_id);
             }
-            // make_tcpsocket_listener::<command::Codec>(&addr)
-            make_websocket_listener(&addr).for_each(|peer| {
+            make_tcpsocket_listener::<command::Codec>(&addr).for_each(|peer| {
+                // make_websocket_listener(&addr).for_each(|peer| {
                 let top = top(peer)
                     .and_then(|(peer, user_id, name, opt_room_code)| {
                         let mut room_code = RoomCode::from(1);
@@ -193,18 +200,21 @@ fn main() {
                         find_room(room_code).and_then(move |(room_id, server_id)| {
                             println!("room id:{} server_id:{}", room_id, server_id);
 
-                            let mut rooms = ROOMS_WS.write().unwrap();
-                            // let mut rooms = ROOMS_TCP.write().unwrap();
+                            // let mut rooms = ROOMS_WS.write().unwrap();
+                            let mut rooms = ROOMS_TCP.write().unwrap();
+                            // let mut rooms = ROOMS_WS_ASYNC.write().unwrap();
 
                             let room_tx;
                             if let Some(tx) = rooms.get(&room_id) {
                                 room_tx = tx.clone();
                             } else {
-                                room_tx = chat_room::<WsPeer, WebSocketError>(room_id);
-                                // room_tx = chat_room::<TcpPeer,std::io::Error>(room_id);
+                                // room_tx = chat_room::<WsPeer, WebSocketError>(room_id);
+                                room_tx = chat_room::<TcpPeer, std::io::Error>(room_id);
+                                // room_tx = chat_room_async::<WsPeer, WebSocketError>(room_id);
                                 rooms.insert(room_id, room_tx.clone());
                             }
-                            room_tx.send(room_command::RoomCommand::Join((peer,name)));
+                            room_tx.send(room_command::RoomCommand::Join((peer, name)));
+                            // .wait();
                             Ok(())
                         })
                     })

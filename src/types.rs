@@ -78,10 +78,14 @@ pub(crate) struct UserIDPhantom;
 pub(crate) struct RoomIDPhantom;
 pub(crate) struct RoomCodePhantom;
 pub(crate) struct ServerIDPhantom;
+pub(crate) struct PeerIDPhantom;
+pub(crate) struct CommandSeqIDPhantom;
 pub(crate) type UserID = ID<u32, UserIDPhantom>;
 pub(crate) type RoomID = ID<u32, RoomIDPhantom>;
 pub(crate) type RoomCode = ID<u32, RoomCodePhantom>;
 pub(crate) type ServerID = ID<u32, ServerIDPhantom>;
+pub(crate) type PeerID = ID<u32, PeerIDPhantom>;
+pub(crate) type CommandSeqID = ID<u32, CommandSeqIDPhantom>;
 
 pub(crate) const fn default_server_id() -> ServerID {
     ServerID {
@@ -94,6 +98,8 @@ pub(crate) type TcpPeer = Framed<TcpStream, command::Codec>;
 
 pub(crate) type RoomCommandSender<S, E> = std::sync::mpsc::SyncSender<RoomCommand<S, E>>;
 pub(crate) type RoomCommandReceiver<S, E> = std::sync::mpsc::Receiver<RoomCommand<S, E>>;
+pub(crate) type RoomCommandAsyncSender<S, E> = futures::sync::mpsc::Sender<RoomCommand<S, E>>;
+pub(crate) type RoomCommandAsyncReceiver<S, E> = futures::sync::mpsc::Receiver<RoomCommand<S, E>>;
 
 // pub(crate) type SharedPeers = peer::SharedPeers<Codec>;
 // pub(crate) type RoomPeersRx = peer::RoomPeersRx<Codec>;
