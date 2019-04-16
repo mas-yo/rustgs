@@ -180,7 +180,10 @@ where
 
                     for (_, tx) in peer_txs.iter_mut() {
                         let text = format!("{}: {}", name, msg);
-                        tx.send(command::S2C::AddText(2001, text)).wait();
+                        // println!("sending {}", text.len());
+                        if tx.send(command::S2C::AddText(2001, text)).wait().is_err() {
+                            println!("send error");
+                        }
                     }
                 }
                 Ok(Async::Ready(None)) => {

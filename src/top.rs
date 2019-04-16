@@ -117,7 +117,7 @@ fn login(name: &str) -> impl Future<Item = (UserID, Option<RoomCode>), Error = (
     let name2 = name.to_string();
     let query = format!("SELECT id,room_code FROM users WHERE name='{}'", name);
     get_db()
-        .new_query(&query)
+        .new_query_multi(vec!["LOCK TABLES users WRITE".to_string(), query])
         .map(move |row| {
             let (id, room_code): (u32, Option<u32>) = mysql::from_row(row);
             match room_code {
@@ -140,6 +140,12 @@ fn login(name: &str) -> impl Future<Item = (UserID, Option<RoomCode>), Error = (
                 Which::from_value(res[0].0)
             }
             .map(move |id| (id, room_code))
+        })
+        .then(move|res|{
+            get_db()
+                .new_query("UNLOCK TABLES")
+                .collect()
+                .and_then(move |_| res)
         })
 }
 
