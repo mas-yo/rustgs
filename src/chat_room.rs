@@ -140,7 +140,7 @@ where
 
     let room = tokio::timer::Interval::new(
         std::time::Instant::now(),
-        std::time::Duration::from_millis(100),
+        std::time::Duration::from_millis(1),
     )
     .skip_while(move |_| {
         match room_rx.try_recv() {

@@ -5,6 +5,7 @@ use std::{
     str::FromStr,
     sync::Arc,
     sync::RwLock,
+    env,
 };
 use websocket::{codec::ws::MessageCodec, message::OwnedMessage, r#async::Server, result::*};
 
@@ -27,6 +28,7 @@ mod tasks;
 mod top;
 mod types;
 mod which;
+//mod room;
 
 use crate::{
     chat_room::*, database::*, listener::*, misc::*, room_command::*, tasks::*, top::*, types::*,
@@ -169,7 +171,8 @@ where
 }
 
 fn main() {
-    let addr = SocketAddr::from_str("127.0.0.1:18290").unwrap();
+    let args: Vec<String> = env::args().collect();
+    let addr = SocketAddr::from_str(&format!("{}:18290", args[1])).unwrap();
 
     let server = Ok(())
         .into_future()
