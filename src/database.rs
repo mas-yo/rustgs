@@ -1,9 +1,9 @@
 use futures::{prelude::*, sync::mpsc};
-use std::{sync::Mutex, thread};
+use std::{sync::Arc, sync::RwLock, thread};
 // use diesel::prelude::*;
 // use diesel::MysqlConnection;
 // use diesel::connection::SimpleConnection;
-use dotenv::dotenv;
+use lazy_static::lazy_static;
 use mysql;
 
 pub type DBResult = mysql::Row;
@@ -14,11 +14,15 @@ pub type DBResultSender = futures::sync::mpsc::Sender<DBResult>;
 pub type DBResultReceiver = futures::sync::mpsc::Receiver<DBResult>;
 pub type DBQuerySender = futures::sync::mpsc::Sender<(DBQuery, DBResultSender)>;
 
-// mysql.batch_execute("INSERT INTO users(id,name) VALUES(1,'test')").expect("exec err");
+lazy_static! {
+    pub(crate) static ref DB_SYNC: Arc<RwLock<mysql::Conn>> = {
+        Arc::new(RwLock::new(mysql::Conn::new("mysql://rustgs:@localhost/rustgs").expect("db conn err")))
+    };
+}
 
-// impl mysql_common::value::convert::FromValue for Vec<String> {
-
-// }
+pub(crate) fn sync_db() -> Arc<RwLock<mysql::Conn>> {
+    DB_SYNC.clone()
+}
 
 pub fn start_database() -> (impl Future<Item = (), Error = ()>, DBQuerySender) {
     let mut mysql = mysql::Conn::new("mysql://rustgs:@localhost/rustgs").expect("db conn err");

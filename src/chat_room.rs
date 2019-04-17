@@ -86,6 +86,7 @@ where
                 let messages = messages.clone();
                 let peers_tx = peers_tx.clone();
                 let recv_msg = rx.for_each(move |cmd| {
+                    println!("{:?}", cmd);
                     match cmd {
                         command::C2S::InputText(txt) => {
                             let mut lock = messages.write().unwrap();
