@@ -65,6 +65,10 @@ lazy_static! {
     pub(crate) static ref ROOMS_TCP: ArcHashMap<RoomID, RoomCommandSender<TcpPeer, std::io::Error>> =
         { new_arc_hash_map() };
 }
+lazy_static! {
+    pub(crate) static ref ROOMS_TCP_ASYNC: ArcHashMap<RoomID, RoomCommandAsyncSender<TcpPeer, std::io::Error>> =
+        { new_arc_hash_map() };
+}
 
 fn new_room(room_code: RoomCode) -> impl Future<Item = RoomID, Error = ()> {
     let query = vec![
@@ -172,7 +176,14 @@ where
 
 fn main() {
     let args: Vec<String> = env::args().collect();
+
+    if args.len() < 3 {
+        println!("usage: {} ipaddr [sync|async]", args[0]);
+        return;
+    }
+
     let addr = SocketAddr::from_str(&format!("{}:18290", args[1])).unwrap();
+    let sync_mode = args[2].clone();
 
     let server = Ok(())
         .into_future()
@@ -182,10 +193,11 @@ fn main() {
             unsafe {
                 SERVER_ID = ServerID::from(server_id);
             }
-            make_tcpsocket_listener::<command::Codec>(&addr).for_each(|peer| {
+            make_tcpsocket_listener::<command::Codec>(&addr).for_each(move|peer| {
+                let sync_mode = sync_mode.clone();
                 // make_websocket_listener(&addr).for_each(|peer| {
                 let top = top(peer)
-                    .and_then(|(peer, user_id, name, opt_room_code)| {
+                    .and_then(move|(peer, user_id, name, opt_room_code)| {
                         let mut room_code = RoomCode::from(1);
                         match opt_room_code {
                             Some(code) => {
@@ -196,26 +208,36 @@ fn main() {
                                 println!("login ok {}", user_id);
                             }
                         }
-
                         find_room(room_code).and_then(move |(room_id, server_id)| {
                             println!("room id:{} server_id:{}", room_id, server_id);
 
-                            // let mut rooms = ROOMS_WS.write().unwrap();
-                            let mut rooms = ROOMS_TCP.write().unwrap();
-                            // let mut rooms = ROOMS_WS_ASYNC.write().unwrap();
+                            let join_command = room_command::RoomCommand::Join((peer, name));
+                            if sync_mode == "sync" {
+                                let mut rooms = ROOMS_TCP.write().unwrap();
 
-                            let room_tx;
-                            if let Some(tx) = rooms.get(&room_id) {
-                                room_tx = tx.clone();
-                            } else {
-                                // room_tx = chat_room::<WsPeer, WebSocketError>(room_id);
-                                room_tx = chat_room::<TcpPeer, std::io::Error>(room_id);
-                                // room_tx = chat_room_async::<WsPeer, WebSocketError>(room_id);
-                                rooms.insert(room_id, room_tx.clone());
+                                let room_tx;
+                                if let Some(tx) = rooms.get(&room_id) {
+                                    room_tx = tx.clone();
+                                } else {
+                                    room_tx = chat_room::<TcpPeer, std::io::Error>(room_id);
+                                    rooms.insert(room_id, room_tx.clone());
+                                }
+                                room_tx.send(join_command);
+                                Ok(())
                             }
-                            room_tx.send(room_command::RoomCommand::Join((peer, name)));
-                            // .wait();
-                            Ok(())
+                            else {
+                                let mut rooms = ROOMS_TCP_ASYNC.write().unwrap();
+
+                                let room_tx;
+                                if let Some(tx) = rooms.get(&room_id) {
+                                    room_tx = tx.clone();
+                                } else {
+                                    room_tx = chat_room_async::<TcpPeer, std::io::Error>(room_id);
+                                    rooms.insert(room_id, room_tx.clone());
+                                }
+                                room_tx.send(join_command).wait();
+                                Ok(())
+                            }
                         })
                     })
                     .map(|_| ());

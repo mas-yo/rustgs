@@ -116,7 +116,7 @@ where
 
     tokio::spawn(recv_room_command);
 
-    println!("room id {} created", room_id);
+    println!("async room id {} created", room_id);
     room_tx
 }
 
@@ -210,7 +210,7 @@ where
 
     tokio::spawn(room);
 
-    println!("room id {} created", room_id);
+    println!("sync room id {} created", room_id);
     room_tx
     //    Ok(()).into_future()
 }
