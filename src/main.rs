@@ -86,44 +86,44 @@ fn new_room(room_code: RoomCode) -> impl Future<Item = RoomID, Error = ()> {
 }
 
 fn find_room(room_code: RoomCode) -> impl Future<Item = (RoomID, ServerID), Error = ()> {
-    get_db()
-        .new_query_multi(vec![
-            "LOCK TABLES rooms WRITE".to_string(),
-            format!(
-                "SELECT id,player_count,server_id FROM rooms WHERE code={}",
-                room_code
-            ),
-        ])
-        .map(move |row| {
-            let (room_id, count, server_id): (u32, u32, u32) = mysql::from_row(row);
-            (RoomID::from(room_id), count, ServerID::from(server_id))
-        })
-        .collect()
-        .and_then(move |res| {
-            let mut server_id;
-            if res.is_empty() {
-                server_id = get_server_id();
-                Which::from_future(new_room(room_code))
-            } else {
-                println!("{:?}", res);
-                let min_count = res
-                    .iter()
-                    .fold((RoomID::from(0), 0u32, ServerID::from(0)), |a, b| {
-                        (b.0, std::cmp::min(a.1, b.1), b.2)
-                    });
-                server_id = min_count.2;
-                Which::from_value(min_count.0)
-            }
-            .map(move |room_id| (room_id, server_id))
-        })
-        .then(move |res| {
-            get_db()
-                .new_query("UNLOCK TABLES")
-                .collect()
-                .and_then(move |_| res)
-        })
 
-    // Ok(RoomID::from(1)).into_future()
+    Ok(()).into_future()
+    .and_then(move|_|{
+        let db = sync_db();
+        let mut db_lock = db.write().unwrap();
+        db_lock.query("LOCK TABLES rooms WRITE").unwrap();
+        let existing: Vec<(u32,u32)> = db_lock.query(format!("SELECT id,server_id FROM rooms WHERE code={} ORDER BY player_count ASC LIMIT 1", room_code)).unwrap()
+        .map(move|row|{
+            let row = row.unwrap();
+            mysql::from_row::<(u32,u32)>(row)
+        })
+        .collect();
+
+        let room_id:RoomID;
+        let server_id: ServerID;
+        if existing.is_empty() {
+
+            db_lock.query(format!("INSERT INTO rooms SET code={},server_id={}", room_code, get_server_id())).unwrap();
+            
+            let new_id:Vec<u32> = db_lock.query("SELECT LAST_INSERT_ID()".to_string()).unwrap()
+            .map(move|row|{
+                let row = row.unwrap();
+                let room_id:u32 = mysql::from_row(row);
+                room_id
+            })
+            .collect();
+
+            room_id = RoomID::from(new_id[0]);
+            server_id = get_server_id();
+        }
+        else {
+            room_id = RoomID::from(existing[0].0);
+            server_id = ServerID::from(existing[0].1);
+        }
+        db_lock.query("UNLOCK TABLES").unwrap();
+
+        Ok((room_id,server_id))
+    })
 }
 
 fn new_server<T>(addr: &T) -> impl Future<Item = ServerID, Error = ()>
@@ -144,34 +144,41 @@ where
         .and_then(|res| Ok(res[0]))
 }
 
-fn find_server_id<T>(addr: &T) -> impl Future<Item = ServerID, Error = ()>
-where
-    T: Display + Clone,
+fn find_server_id(addr: SocketAddr) -> impl Future<Item = ServerID, Error = ()>
 {
-    let query = format!("SELECT id FROM servers WHERE address='{}'", addr);
-    let addr2 = addr.clone();
-    get_db()
-        .new_query_multi(vec!["LOCK TABLES servers WRITE".to_string(), query])
-        .map(move |row| {
-            let id: u32 = mysql::from_row(row);
-            ServerID::from(id)
+    Ok(()).into_future()
+    .and_then(move|_|{
+        let db = sync_db();
+        let mut db_lock = db.write().unwrap();
+        db_lock.query("LOCK TABLES servers WRITE").unwrap();
+        let existing: Vec<u32> = db_lock.query(format!("SELECT id FROM servers WHERE address='{}'", addr)).unwrap()
+        .map(move|row|{
+            let row = row.unwrap();
+            mysql::from_row::<u32>(row)
         })
-        .collect()
-        .and_then(move |res| {
-            if res.is_empty() {
-                Which::from_future(new_server(&addr2))
-            } else {
-                Which::from_value(res[0])
-            }
-        })
-        .then(move |res| {
-            get_db()
-                .new_query("UNLOCK TABLES")
-                .collect()
-                .and_then(move |_| res)
-        })
+        .collect();
 
-    // Ok(ServerID::from(0)).into_future()
+        let server_id: ServerID;
+        if existing.is_empty() {
+
+            db_lock.query(format!("INSERT INTO servers SET address='{}'", addr)).unwrap();
+            
+            let new_id:Vec<u32> = db_lock.query("SELECT LAST_INSERT_ID()".to_string()).unwrap()
+            .map(move|row|{
+                let row = row.unwrap();
+                mysql::from_row::<u32>(row)
+            })
+            .collect();
+
+            server_id = ServerID::from(new_id[0]);
+        }
+        else {
+            server_id = ServerID::from(existing[0]);
+        }
+        db_lock.query("UNLOCK TABLES").unwrap();
+
+        Ok(server_id)
+    })
 }
 
 fn main() {
@@ -188,7 +195,7 @@ fn main() {
     let server = Ok(())
         .into_future()
         .and_then(|_| get_db().new_query("SELECT 1").collect())
-        .and_then(move |_| find_server_id(&addr))
+        .and_then(move |_| find_server_id(addr))
         .and_then(move |server_id| {
             unsafe {
                 SERVER_ID = ServerID::from(server_id);
