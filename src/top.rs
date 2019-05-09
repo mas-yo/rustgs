@@ -121,7 +121,7 @@ fn login(name: &str) -> impl Future<Item = (UserID, Option<RoomCode>), Error = (
     get_db()
         .new_query_multi(queries)
         .map(move |row| {
-            let (id, room_code): (u32, Option<u32>) = mysql::from_row(row);
+            let (id, room_code): (u64, Option<u64>) = mysql::from_row(row);
             match room_code {
                 None => (UserID::from(id), None),
                 Some(code) => (UserID::from(id), Some(RoomCode::from(code))),
@@ -141,14 +141,14 @@ fn new_user(name: &str) -> impl Future<Item = UserID, Error = ()> {
     get_db()
         .new_query_multi(query)
         .map(move |row| {
-            let id: u32 = mysql::from_row(row);
+            let id: u64 = mysql::from_row(row);
             id
         })
         .collect()
         .map(|res| UserID::from(res[0]))
 }
 
-fn search_room(room_code: u32) -> impl Future<Item = Option<(u32, u32)>, Error = ()> {
+fn search_room(room_code: u64) -> impl Future<Item = Option<(u64, u64)>, Error = ()> {
     //TODO find least load server
     let query = format!(
         "SELECT id,server_id FROM rooms WHERE room_code={}",
@@ -157,7 +157,7 @@ fn search_room(room_code: u32) -> impl Future<Item = Option<(u32, u32)>, Error =
     get_db()
         .new_query(&query)
         .map(move |row| {
-            let (room_id, server_id): (u32, u32) = mysql::from_row(row);
+            let (room_id, server_id): (u64, u64) = mysql::from_row(row);
             (room_id, server_id)
         })
         .collect()

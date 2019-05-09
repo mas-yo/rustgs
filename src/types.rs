@@ -8,38 +8,30 @@ use tokio::net::TcpStream;
 
 use crate::{command, misc::*, peer, room_command::*, sequence_map::*};
 
-pub(crate) struct ID<V, F>
-where
-    V: Copy,
+pub(crate) struct ID<F>
 {
-    value: V,
+    value: u64,
     phantom: PhantomData<F>,
 }
-impl<V, F> PartialEq for ID<V, F>
-where
-    V: PartialEq + Copy,
+impl<F> PartialEq for ID<F>
 {
     fn eq(&self, other: &Self) -> bool {
         self.value == other.value
     }
 }
-impl<V, F> Eq for ID<V, F> where V: PartialEq + Copy {}
+impl<F> Eq for ID<F> {}
 
-impl<V, F> From<V> for ID<V, F>
-where
-    V: Copy,
+impl<F> From<u64> for ID<F>
 {
-    fn from(v: V) -> Self {
+    fn from(v: u64) -> Self {
         Self {
             value: v,
             phantom: PhantomData,
         }
     }
 }
-impl<V, F> Copy for ID<V, F> where V: Copy {}
-impl<V, F> Clone for ID<V, F>
-where
-    V: Copy + Clone,
+impl<F> Copy for ID<F> {}
+impl<F> Clone for ID<F>
 {
     fn clone(&self) -> Self {
         Self {
@@ -48,29 +40,38 @@ where
         }
     }
 }
-impl<V, F> fmt::Display for ID<V, F>
-where
-    V: fmt::Display + Copy,
+impl<F> fmt::Display for ID<F>
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.value)
     }
 }
 
-impl<V, F> fmt::Debug for ID<V, F>
-where
-    V: fmt::Debug + Copy,
+impl<F> fmt::Debug for ID<F>
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self.value)
     }
 }
-impl<V, F> Hash for ID<V, F>
-where
-    V: Hash + Copy,
+impl<F> Hash for ID<F>
 {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.value.hash(state);
+    }
+}
+
+impl<F> ID<F> {
+    pub fn new() -> Self {
+        Self {
+            value: 1,
+            phantom: PhantomData,
+        }
+    }
+    pub fn next(&mut self) {
+        if self.value == std::u64::MAX {
+            panic!("id reached max");
+        }
+        self.value += 1;
     }
 }
 
@@ -80,12 +81,12 @@ pub(crate) struct RoomCodePhantom;
 pub(crate) struct ServerIDPhantom;
 pub(crate) struct PeerIDPhantom;
 pub(crate) struct CommandSeqIDPhantom;
-pub(crate) type UserID = ID<u32, UserIDPhantom>;
-pub(crate) type RoomID = ID<u32, RoomIDPhantom>;
-pub(crate) type RoomCode = ID<u32, RoomCodePhantom>;
-pub(crate) type ServerID = ID<u32, ServerIDPhantom>;
-pub(crate) type PeerID = ID<u32, PeerIDPhantom>;
-pub(crate) type CommandSeqID = ID<u32, CommandSeqIDPhantom>;
+pub(crate) type UserID = ID<UserIDPhantom>;
+pub(crate) type RoomID = ID< RoomIDPhantom>;
+pub(crate) type RoomCode = ID<RoomCodePhantom>;
+pub(crate) type ServerID = ID<ServerIDPhantom>;
+pub(crate) type PeerID = ID<PeerIDPhantom>;
+pub(crate) type CommandSeqID = ID<CommandSeqIDPhantom>;
 
 pub(crate) const fn default_server_id() -> ServerID {
     ServerID {
