@@ -49,6 +49,45 @@ where
     }
 }
 
+enum AsyncSendItem<P,D> {
+    Peer(P),
+    SendData(D),
+}
+
+fn async_sender<S,I>() -> futures::sync::mpsc::Sender<(Option<PeerID>,AsyncSendItem<S,I>)>
+ where S:'static+Send+Sink<SinkItem=I>,I:'static+Send+Clone+Debug, S::SinkError:Debug {
+    
+    let mut peers_tx = HashMap::new();
+    let (tx, rx) = futures::sync::mpsc::channel::<(Option<PeerID>,AsyncSendItem<S,I>)>(32);
+    let task = rx.for_each(move |(peer_id, item)|{
+
+        match item {
+            AsyncSendItem::Peer(peer) => {
+                if peer_id.is_some() {
+                    peers_tx.insert(peer_id.unwrap(), peer.wait());
+                }
+            },
+            AsyncSendItem::SendData(data) => {
+                peers_tx.retain(|id,tx|{
+                    if peer_id.is_some() && peer_id.unwrap() != *id { return true; }
+                    // println!("send {:?} to {}", data, id);
+                    if let Err(e) = tx.send(data.clone()) {
+                        // println!("send err! {:?}", e);
+                        return false;
+                    }
+                    tx.flush();
+                    true
+                });
+            }
+        }
+        Ok(())
+    });
+
+    tokio::spawn(task.map_err(|_|()));
+
+    tx
+}
+
 pub(crate) fn chat_room_async<S, E>(room_id: RoomID) -> RoomCommandAsyncSender<S, E>
 where
     S: 'static
@@ -59,34 +98,38 @@ where
 {
     let (room_tx, room_rx) = futures::sync::mpsc::channel::<RoomCommand<S, E>>(12);
     let messages = Arc::new(RwLock::new(VecDeque::<ChatMessage>::new()));
-    let peers_tx = Arc::new(RwLock::new(HashMap::new()));
 
-    let mut next_peer_id = 1;
+    let sender = async_sender();
+    let mut sender1 = sender.clone().wait();
+
+    let mut next_peer_id = PeerID::new();
     let recv_room_command = room_rx.for_each(move |cmd| {
         match cmd {
             RoomCommand::Join((peer, name)) => {
                 let (tx, rx) = peer.split();
 
-                {
-                    let messages = messages.read().unwrap();
-                    let tx = tx.send(command::S2C::ShowUI(2, true)).wait().unwrap();
-                    let mut opt_tx = Some(tx);
-                    for msg in messages.iter() {
-                        // let t:String = msg.name.clone();
-                        let txt = format!("{}: {}", msg.name, msg.message);
-                        let tx = opt_tx.take().unwrap();
-                        opt_tx = Some(tx.send(command::S2C::AddText(2001, txt)).wait().unwrap());
-                    }
-                    let tx = opt_tx.take().unwrap();
+                if let Err(e) = sender1.send((Some(next_peer_id), AsyncSendItem::Peer(tx))) {
+                    println!("send join error, {}", e);
+                }
 
-                    let mut peers_tx = peers_tx.write().unwrap();
-                    peers_tx.insert(next_peer_id, tx);
-                    next_peer_id += 1;
+                {
+                    if let Err(e) = sender1.send((Some(next_peer_id), AsyncSendItem::SendData(command::S2C::ShowUI(2, true)))) {
+                        println!("show ui 2 send error {}", e);
+                    }
+                    let messages = messages.read().unwrap();
+                    for msg in messages.iter() {
+                        let txt = format!("{}: {}", msg.name, msg.message);
+                        if let Err(e) = sender1.send((Some(next_peer_id), AsyncSendItem::SendData(command::S2C::AddText(2001, txt)))) {
+                            println!("text send error {}", e);
+                        }
+                    }
+
+                    next_peer_id.next();
                 }
                 let messages = messages.clone();
-                let peers_tx = peers_tx.clone();
+                let mut sender2 = sender.clone().wait();
                 let recv_msg = rx.for_each(move |cmd| {
-                    println!("{:?}", cmd);
+                    // println!("{:?}", cmd);
                     match cmd {
                         command::C2S::InputText(txt) => {
                             let mut lock = messages.write().unwrap();
@@ -98,11 +141,9 @@ where
                                 lock.pop_front();
                             }
 
-                            let mut peers_tx = peers_tx.write().unwrap();
                             let chat_txt = format!("{}: {}", name, txt);
-                            for (_, tx) in peers_tx.iter_mut() {
-                                tx.send(command::S2C::AddText(2001, chat_txt.clone()))
-                                    .wait();
+                            if let Err(e) = sender2.send((None, AsyncSendItem::SendData(command::S2C::AddText(2001, chat_txt.clone())))) {
+                                println!("send text error {}", e);
                             }
                         }
                         _ => {}

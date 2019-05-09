@@ -78,7 +78,7 @@ fn new_room(room_code: RoomCode) -> impl Future<Item = RoomID, Error = ()> {
     get_db()
         .new_query_multi(query)
         .map(move |row| {
-            let room_id: u32 = mysql::from_row(row);
+            let room_id: u64 = mysql::from_row(row);
             RoomID::from(room_id)
         })
         .collect()
@@ -92,10 +92,10 @@ fn find_room(room_code: RoomCode) -> impl Future<Item = (RoomID, ServerID), Erro
         let db = sync_db();
         let mut db_lock = db.write().unwrap();
         db_lock.query("LOCK TABLES rooms WRITE").unwrap();
-        let existing: Vec<(u32,u32)> = db_lock.query(format!("SELECT id,server_id FROM rooms WHERE code={} ORDER BY player_count ASC LIMIT 1", room_code)).unwrap()
+        let existing: Vec<(u64,u64)> = db_lock.query(format!("SELECT id,server_id FROM rooms WHERE code={} ORDER BY player_count ASC LIMIT 1", room_code)).unwrap()
         .map(move|row|{
             let row = row.unwrap();
-            mysql::from_row::<(u32,u32)>(row)
+            mysql::from_row::<(u64,u64)>(row)
         })
         .collect();
 
@@ -105,10 +105,10 @@ fn find_room(room_code: RoomCode) -> impl Future<Item = (RoomID, ServerID), Erro
 
             db_lock.query(format!("INSERT INTO rooms SET code={},server_id={}", room_code, get_server_id())).unwrap();
             
-            let new_id:Vec<u32> = db_lock.query("SELECT LAST_INSERT_ID()".to_string()).unwrap()
+            let new_id:Vec<u64> = db_lock.query("SELECT LAST_INSERT_ID()".to_string()).unwrap()
             .map(move|row|{
                 let row = row.unwrap();
-                let room_id:u32 = mysql::from_row(row);
+                let room_id:u64 = mysql::from_row(row);
                 room_id
             })
             .collect();
@@ -137,7 +137,7 @@ where
     get_db()
         .new_query_multi(query)
         .map(move |row| {
-            let id: u32 = mysql::from_row(row);
+            let id: u64 = mysql::from_row(row);
             ServerID::from(id)
         })
         .collect()
@@ -151,10 +151,10 @@ fn find_server_id(addr: SocketAddr) -> impl Future<Item = ServerID, Error = ()>
         let db = sync_db();
         let mut db_lock = db.write().unwrap();
         db_lock.query("LOCK TABLES servers WRITE").unwrap();
-        let existing: Vec<u32> = db_lock.query(format!("SELECT id FROM servers WHERE address='{}'", addr)).unwrap()
+        let existing: Vec<u64> = db_lock.query(format!("SELECT id FROM servers WHERE address='{}'", addr)).unwrap()
         .map(move|row|{
             let row = row.unwrap();
-            mysql::from_row::<u32>(row)
+            mysql::from_row::<u64>(row)
         })
         .collect();
 
@@ -163,10 +163,10 @@ fn find_server_id(addr: SocketAddr) -> impl Future<Item = ServerID, Error = ()>
 
             db_lock.query(format!("INSERT INTO servers SET address='{}'", addr)).unwrap();
             
-            let new_id:Vec<u32> = db_lock.query("SELECT LAST_INSERT_ID()".to_string()).unwrap()
+            let new_id:Vec<u64> = db_lock.query("SELECT LAST_INSERT_ID()".to_string()).unwrap()
             .map(move|row|{
                 let row = row.unwrap();
-                mysql::from_row::<u32>(row)
+                mysql::from_row::<u64>(row)
             })
             .collect();
 
