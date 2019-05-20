@@ -16,7 +16,9 @@ pub type DBQuerySender = futures::sync::mpsc::Sender<(DBQuery, DBResultSender)>;
 
 lazy_static! {
     pub(crate) static ref DB_SYNC: Arc<RwLock<mysql::Conn>> = {
-        Arc::new(RwLock::new(mysql::Conn::new("mysql://rustgs:@localhost/rustgs").expect("db conn err")))
+        Arc::new(RwLock::new(
+            mysql::Conn::new("mysql://rustgs:@localhost/rustgs").expect("db conn err"),
+        ))
     };
 }
 

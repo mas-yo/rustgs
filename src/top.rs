@@ -116,8 +116,10 @@ where
 fn login(name: &str) -> impl Future<Item = (UserID, Option<RoomCode>), Error = ()> {
     let name2 = name.to_string();
     // let query = format!("SELECT id,room_code FROM users WHERE name='{}'", name);
-    let queries = vec![format!("INSERT IGNORE users SET name='{}'", name),
-    format!("SELECT id,room_code FROM users WHERE name='{}'", name)];
+    let queries = vec![
+        format!("INSERT IGNORE users SET name='{}'", name),
+        format!("SELECT id,room_code FROM users WHERE name='{}'", name),
+    ];
     get_db()
         .new_query_multi(queries)
         .map(move |row| {
@@ -128,9 +130,7 @@ fn login(name: &str) -> impl Future<Item = (UserID, Option<RoomCode>), Error = (
             }
         })
         .collect()
-        .and_then(move |res| {
-            Ok((res[0].0,res[0].1))
-        })
+        .and_then(move |res| Ok((res[0].0, res[0].1)))
 }
 
 fn new_user(name: &str) -> impl Future<Item = UserID, Error = ()> {

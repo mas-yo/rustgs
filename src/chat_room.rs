@@ -49,27 +49,31 @@ where
     }
 }
 
-enum AsyncSendItem<P,D> {
+enum AsyncSendItem<P, D> {
     Peer(P),
     SendData(D),
 }
 
-fn async_sender<S,I>() -> futures::sync::mpsc::Sender<(Option<PeerID>,AsyncSendItem<S,I>)>
- where S:'static+Send+Sink<SinkItem=I>,I:'static+Send+Clone+Debug, S::SinkError:Debug {
-    
+fn async_sender<S, I>() -> futures::sync::mpsc::Sender<(Option<PeerID>, AsyncSendItem<S, I>)>
+where
+    S: 'static + Send + Sink<SinkItem = I>,
+    I: 'static + Send + Clone + Debug,
+    S::SinkError: Debug,
+{
     let mut peers_tx = HashMap::new();
-    let (tx, rx) = futures::sync::mpsc::channel::<(Option<PeerID>,AsyncSendItem<S,I>)>(32);
-    let task = rx.for_each(move |(peer_id, item)|{
-
+    let (tx, rx) = futures::sync::mpsc::channel::<(Option<PeerID>, AsyncSendItem<S, I>)>(32);
+    let task = rx.for_each(move |(peer_id, item)| {
         match item {
             AsyncSendItem::Peer(peer) => {
                 if peer_id.is_some() {
                     peers_tx.insert(peer_id.unwrap(), peer.wait());
                 }
-            },
+            }
             AsyncSendItem::SendData(data) => {
-                peers_tx.retain(|id,tx|{
-                    if peer_id.is_some() && peer_id.unwrap() != *id { return true; }
+                peers_tx.retain(|id, tx| {
+                    if peer_id.is_some() && peer_id.unwrap() != *id {
+                        return true;
+                    }
                     // println!("send {:?} to {}", data, id);
                     if let Err(e) = tx.send(data.clone()) {
                         // println!("send err! {:?}", e);
@@ -83,7 +87,7 @@ fn async_sender<S,I>() -> futures::sync::mpsc::Sender<(Option<PeerID>,AsyncSendI
         Ok(())
     });
 
-    tokio::spawn(task.map_err(|_|()));
+    tokio::spawn(task.map_err(|_| ()));
 
     tx
 }
@@ -113,13 +117,19 @@ where
                 }
 
                 {
-                    if let Err(e) = sender1.send((Some(next_peer_id), AsyncSendItem::SendData(command::S2C::ShowUI(2, true)))) {
+                    if let Err(e) = sender1.send((
+                        Some(next_peer_id),
+                        AsyncSendItem::SendData(command::S2C::ShowUI(2, true)),
+                    )) {
                         println!("show ui 2 send error {}", e);
                     }
                     let messages = messages.read().unwrap();
                     for msg in messages.iter() {
                         let txt = format!("{}: {}", msg.name, msg.message);
-                        if let Err(e) = sender1.send((Some(next_peer_id), AsyncSendItem::SendData(command::S2C::AddText(2001, txt)))) {
+                        if let Err(e) = sender1.send((
+                            Some(next_peer_id),
+                            AsyncSendItem::SendData(command::S2C::AddText(2001, txt)),
+                        )) {
                             println!("text send error {}", e);
                         }
                     }
@@ -142,7 +152,13 @@ where
                             }
 
                             let chat_txt = format!("{}: {}", name, txt);
-                            if let Err(e) = sender2.send((None, AsyncSendItem::SendData(command::S2C::AddText(2001, chat_txt.clone())))) {
+                            if let Err(e) = sender2.send((
+                                None,
+                                AsyncSendItem::SendData(command::S2C::AddText(
+                                    2001,
+                                    chat_txt.clone(),
+                                )),
+                            )) {
                                 println!("send text error {}", e);
                             }
                         }
@@ -207,7 +223,7 @@ where
             _ => {}
         }
 
-        peer_rxs.retain(|_,(rx,name)|{
+        peer_rxs.retain(|_, (rx, name)| {
             match rx.poll() {
                 Ok(Async::Ready(Some(command::C2S::InputText(msg)))) => {
                     messages.push_back(ChatMessage {
