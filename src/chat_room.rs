@@ -207,9 +207,7 @@ where
             _ => {}
         }
 
-        let mut remove_peers = Vec::new();
-
-        for (peer_id, (rx, name)) in peer_rxs.iter_mut() {
+        peer_rxs.retain(|_,(rx,name)|{
             match rx.poll() {
                 Ok(Async::Ready(Some(command::C2S::InputText(msg)))) => {
                     messages.push_back(ChatMessage {
@@ -229,16 +227,12 @@ where
                     }
                 }
                 Ok(Async::Ready(None)) => {
-                    remove_peers.push(peer_id.clone());
+                    return false;
                 }
                 _ => {}
             }
-        }
-
-        for id in remove_peers {
-            peer_txs.remove(&id);
-            peer_rxs.remove(&id);
-        }
+            true
+        });
 
         if room_started && peer_rxs.len() == 0 {
             println!("room id {} closed", room_id);
