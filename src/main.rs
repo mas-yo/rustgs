@@ -1,11 +1,11 @@
 use std::{
+    env,
     fmt::Display,
     net::{SocketAddr, ToSocketAddrs},
     prelude::v1::*,
     str::FromStr,
     sync::Arc,
     sync::RwLock,
-    env,
 };
 use websocket::{codec::ws::MessageCodec, message::OwnedMessage, r#async::Server, result::*};
 
@@ -86,43 +86,52 @@ fn new_room(room_code: RoomCode) -> impl Future<Item = RoomID, Error = ()> {
 }
 
 fn find_room(room_code: RoomCode) -> impl Future<Item = (RoomID, ServerID), Error = ()> {
-
-    Ok(()).into_future()
-    .and_then(move|_|{
+    Ok(()).into_future().and_then(move |_| {
         let db = sync_db();
         let mut db_lock = db.write().unwrap();
         db_lock.query("LOCK TABLES rooms WRITE").unwrap();
-        let existing: Vec<(u64,u64)> = db_lock.query(format!("SELECT id,server_id FROM rooms WHERE code={} ORDER BY player_count ASC LIMIT 1", room_code)).unwrap()
-        .map(move|row|{
-            let row = row.unwrap();
-            mysql::from_row::<(u64,u64)>(row)
-        })
-        .collect();
-
-        let room_id:RoomID;
-        let server_id: ServerID;
-        if existing.is_empty() {
-
-            db_lock.query(format!("INSERT INTO rooms SET code={},server_id={}", room_code, get_server_id())).unwrap();
-            
-            let new_id:Vec<u64> = db_lock.query("SELECT LAST_INSERT_ID()".to_string()).unwrap()
-            .map(move|row|{
+        let existing: Vec<(u64, u64)> = db_lock
+            .query(format!(
+                "SELECT id,server_id FROM rooms WHERE code={} ORDER BY player_count ASC LIMIT 1",
+                room_code
+            ))
+            .unwrap()
+            .map(move |row| {
                 let row = row.unwrap();
-                let room_id:u64 = mysql::from_row(row);
-                room_id
+                mysql::from_row::<(u64, u64)>(row)
             })
             .collect();
 
+        let room_id: RoomID;
+        let server_id: ServerID;
+        if existing.is_empty() {
+            db_lock
+                .query(format!(
+                    "INSERT INTO rooms SET code={},server_id={}",
+                    room_code,
+                    get_server_id()
+                ))
+                .unwrap();
+
+            let new_id: Vec<u64> = db_lock
+                .query("SELECT LAST_INSERT_ID()".to_string())
+                .unwrap()
+                .map(move |row| {
+                    let row = row.unwrap();
+                    let room_id: u64 = mysql::from_row(row);
+                    room_id
+                })
+                .collect();
+
             room_id = RoomID::from(new_id[0]);
             server_id = get_server_id();
-        }
-        else {
+        } else {
             room_id = RoomID::from(existing[0].0);
             server_id = ServerID::from(existing[0].1);
         }
         db_lock.query("UNLOCK TABLES").unwrap();
 
-        Ok((room_id,server_id))
+        Ok((room_id, server_id))
     })
 }
 
@@ -144,35 +153,37 @@ where
         .and_then(|res| Ok(res[0]))
 }
 
-fn find_server_id(addr: SocketAddr) -> impl Future<Item = ServerID, Error = ()>
-{
-    Ok(()).into_future()
-    .and_then(move|_|{
+fn find_server_id(addr: SocketAddr) -> impl Future<Item = ServerID, Error = ()> {
+    Ok(()).into_future().and_then(move |_| {
         let db = sync_db();
         let mut db_lock = db.write().unwrap();
         db_lock.query("LOCK TABLES servers WRITE").unwrap();
-        let existing: Vec<u64> = db_lock.query(format!("SELECT id FROM servers WHERE address='{}'", addr)).unwrap()
-        .map(move|row|{
-            let row = row.unwrap();
-            mysql::from_row::<u64>(row)
-        })
-        .collect();
-
-        let server_id: ServerID;
-        if existing.is_empty() {
-
-            db_lock.query(format!("INSERT INTO servers SET address='{}'", addr)).unwrap();
-            
-            let new_id:Vec<u64> = db_lock.query("SELECT LAST_INSERT_ID()".to_string()).unwrap()
-            .map(move|row|{
+        let existing: Vec<u64> = db_lock
+            .query(format!("SELECT id FROM servers WHERE address='{}'", addr))
+            .unwrap()
+            .map(move |row| {
                 let row = row.unwrap();
                 mysql::from_row::<u64>(row)
             })
             .collect();
 
+        let server_id: ServerID;
+        if existing.is_empty() {
+            db_lock
+                .query(format!("INSERT INTO servers SET address='{}'", addr))
+                .unwrap();
+
+            let new_id: Vec<u64> = db_lock
+                .query("SELECT LAST_INSERT_ID()".to_string())
+                .unwrap()
+                .map(move |row| {
+                    let row = row.unwrap();
+                    mysql::from_row::<u64>(row)
+                })
+                .collect();
+
             server_id = ServerID::from(new_id[0]);
-        }
-        else {
+        } else {
             server_id = ServerID::from(existing[0]);
         }
         db_lock.query("UNLOCK TABLES").unwrap();
@@ -200,11 +211,11 @@ fn main() {
             unsafe {
                 SERVER_ID = ServerID::from(server_id);
             }
-            make_tcpsocket_listener::<command::Codec>(&addr).for_each(move|peer| {
+            make_tcpsocket_listener::<command::Codec>(&addr).for_each(move |peer| {
                 let sync_mode = sync_mode.clone();
                 // make_websocket_listener(&addr).for_each(|peer| {
                 let top = top(peer)
-                    .and_then(move|(peer, user_id, name, opt_room_code)| {
+                    .and_then(move |(peer, user_id, name, opt_room_code)| {
                         let mut room_code = RoomCode::from(1);
                         match opt_room_code {
                             Some(code) => {
@@ -231,8 +242,7 @@ fn main() {
                                 }
                                 room_tx.send(join_command);
                                 Ok(())
-                            }
-                            else {
+                            } else {
                                 let mut rooms = ROOMS_TCP_ASYNC.write().unwrap();
 
                                 let room_tx;

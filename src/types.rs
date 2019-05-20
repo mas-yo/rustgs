@@ -8,21 +8,18 @@ use tokio::net::TcpStream;
 
 use crate::{command, misc::*, peer, room_command::*, sequence_map::*};
 
-pub(crate) struct ID<F>
-{
+pub(crate) struct ID<F> {
     value: u64,
     phantom: PhantomData<F>,
 }
-impl<F> PartialEq for ID<F>
-{
+impl<F> PartialEq for ID<F> {
     fn eq(&self, other: &Self) -> bool {
         self.value == other.value
     }
 }
 impl<F> Eq for ID<F> {}
 
-impl<F> From<u64> for ID<F>
-{
+impl<F> From<u64> for ID<F> {
     fn from(v: u64) -> Self {
         Self {
             value: v,
@@ -31,8 +28,7 @@ impl<F> From<u64> for ID<F>
     }
 }
 impl<F> Copy for ID<F> {}
-impl<F> Clone for ID<F>
-{
+impl<F> Clone for ID<F> {
     fn clone(&self) -> Self {
         Self {
             value: self.value.clone(),
@@ -40,21 +36,18 @@ impl<F> Clone for ID<F>
         }
     }
 }
-impl<F> fmt::Display for ID<F>
-{
+impl<F> fmt::Display for ID<F> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.value)
     }
 }
 
-impl<F> fmt::Debug for ID<F>
-{
+impl<F> fmt::Debug for ID<F> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self.value)
     }
 }
-impl<F> Hash for ID<F>
-{
+impl<F> Hash for ID<F> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.value.hash(state);
     }
@@ -82,7 +75,7 @@ pub(crate) struct ServerIDPhantom;
 pub(crate) struct PeerIDPhantom;
 pub(crate) struct CommandSeqIDPhantom;
 pub(crate) type UserID = ID<UserIDPhantom>;
-pub(crate) type RoomID = ID< RoomIDPhantom>;
+pub(crate) type RoomID = ID<RoomIDPhantom>;
 pub(crate) type RoomCode = ID<RoomCodePhantom>;
 pub(crate) type ServerID = ID<ServerIDPhantom>;
 pub(crate) type PeerID = ID<PeerIDPhantom>;
