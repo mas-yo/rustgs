@@ -192,17 +192,7 @@ fn find_server_id(addr: SocketAddr) -> impl Future<Item = ServerID, Error = ()> 
     })
 }
 
-fn main() {
-    let args: Vec<String> = env::args().collect();
-
-    if args.len() < 3 {
-        println!("usage: {} ipaddr [sync|async]", args[0]);
-        return;
-    }
-
-    let addr = SocketAddr::from_str(&format!("{}:18290", args[1])).unwrap();
-    let sync_mode = args[2].clone();
-
+fn make_tcp_server(addr: SocketAddr, sync_mode: String) -> impl Future<Item = (), Error = ()> {
     let server = Ok(())
         .into_future()
         .and_then(|_| get_db().new_query("SELECT 1").collect())
@@ -262,6 +252,105 @@ fn main() {
                 Ok(())
             })
         });
+    server
+}
+
+fn make_websocket_server(
+    addr: SocketAddr,
+    sync_mode: String,
+) -> impl Future<Item = (), Error = ()> {
+    let server = Ok(())
+        .into_future()
+        .and_then(|_| get_db().new_query("SELECT 1").collect())
+        .and_then(move |_| find_server_id(addr))
+        .and_then(move |server_id| {
+            unsafe {
+                SERVER_ID = ServerID::from(server_id);
+            }
+            make_websocket_listener(&addr).for_each(move |peer| {
+                let sync_mode = sync_mode.clone();
+                // make_websocket_listener(&addr).for_each(|peer| {
+                let top =
+                    top(peer)
+                        .and_then(move |(peer, user_id, name, opt_room_code)| {
+                            let mut room_code = RoomCode::from(1);
+                            match opt_room_code {
+                                Some(code) => {
+                                    println!("login ok {},{}", user_id, code);
+                                    room_code = code;
+                                }
+                                None => {
+                                    println!("login ok {}", user_id);
+                                }
+                            }
+                            find_room(room_code).and_then(move |(room_id, server_id)| {
+                                println!("room id:{} server_id:{}", room_id, server_id);
+
+                                let join_command = room_command::RoomCommand::Join((peer, name));
+                                if sync_mode == "sync" {
+                                    let mut rooms = ROOMS_WS.write().unwrap();
+
+                                    let room_tx;
+                                    if let Some(tx) = rooms.get(&room_id) {
+                                        room_tx = tx.clone();
+                                    } else {
+                                        room_tx = chat_room::<
+                                            WsPeer,
+                                            websocket::result::WebSocketError,
+                                        >(room_id);
+                                        rooms.insert(room_id, room_tx.clone());
+                                    }
+                                    room_tx.send(join_command);
+                                    Ok(())
+                                } else {
+                                    let mut rooms = ROOMS_WS_ASYNC.write().unwrap();
+
+                                    let room_tx;
+                                    if let Some(tx) = rooms.get(&room_id) {
+                                        room_tx = tx.clone();
+                                    } else {
+                                        room_tx = chat_room_async::<
+                                            WsPeer,
+                                            websocket::result::WebSocketError,
+                                        >(room_id);
+                                        rooms.insert(room_id, room_tx.clone());
+                                    }
+                                    room_tx.send(join_command).wait();
+                                    Ok(())
+                                }
+                            })
+                        })
+                        .map(|_| ());
+                tokio::spawn(top);
+                Ok(())
+            })
+        });
+    server
+}
+
+#[cfg(feature = "protocol_ws")]
+fn make_server(addr: SocketAddr, sync_mode: String) -> impl Future<Item = (), Error = ()> {
+    println!("websocket server");
+    make_websocket_server(addr, sync_mode)
+}
+#[cfg(feature = "protocol_tcp")]
+fn make_server(addr: SocketAddr, sync_mode: String) -> impl Future<Item = (), Error = ()> {
+    println!("tcp server");
+    make_tcp_server(addr, sync_mode)
+}
+
+fn main() {
+    let args: Vec<String> = env::args().collect();
+
+    if args.len() < 3 {
+        println!("usage: {} ipaddr [sync|async]", args[0]);
+        return;
+    }
+
+    let addr = SocketAddr::from_str(&format!("{}:18290", args[1])).unwrap();
+    let sync_mode = args[2].clone();
+
+    let server = make_server(addr, sync_mode);
     tokio::run(server);
 }
 
