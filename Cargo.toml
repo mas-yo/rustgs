@@ -4,6 +4,10 @@ version = "0.1.0"
 authors = ["Masahiro Yoshida <mypianoplayer@gmail.com>"]
 edition = "2018"
 
+[features]
+protocol_ws = []
+protocol_tcp = []
+
 [dependencies]
 tokio = "0.1.14"
 futures = "0.1.25"
