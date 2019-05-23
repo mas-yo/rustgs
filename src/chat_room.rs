@@ -2,7 +2,7 @@ use chrono::*;
 use futures::prelude::*;
 use std::{collections::*, fmt::*, sync::*};
 
-use crate::{command, database::*, misc::*, peer::*, room_command::*, tasks::*, types::*};
+use crate::{command, database::*, get_db, misc::*, peer::*, room_command::*, tasks::*, types::*};
 
 pub(crate) struct ChatMessage {
     name: String,
@@ -243,6 +243,7 @@ where
                     }
                 }
                 Ok(Async::Ready(None)) => {
+                    get_db().new_query(format!("UPDATE rooms SET player_count=player_count-1 WHERE id={}", room_id));
                     return false;
                 }
                 _ => {}

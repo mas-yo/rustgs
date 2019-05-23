@@ -90,24 +90,28 @@ fn find_room(room_code: RoomCode) -> impl Future<Item = (RoomID, ServerID), Erro
         let db = sync_db();
         let mut db_lock = db.write().unwrap();
         db_lock.query("LOCK TABLES rooms WRITE").unwrap();
-        let existing: Vec<(u64, u64)> = db_lock
+        let existing: Vec<(u64, u64, u32)> = db_lock
             .query(format!(
-                "SELECT id,server_id FROM rooms WHERE code={} ORDER BY player_count ASC LIMIT 1",
+                "SELECT id,server_id,player_count FROM rooms WHERE code={} ORDER BY player_count ASC LIMIT 1",
                 room_code
             ))
             .unwrap()
             .map(move |row| {
                 let row = row.unwrap();
-                mysql::from_row::<(u64, u64)>(row)
+                mysql::from_row::<(u64, u64, u32)>(row)
             })
             .collect();
 
+        let mut new_room = false;
+        if existing.is_empty() { new_room = true; }
+        else if existing[0].2 >= 2 { new_room = true; }
+
         let room_id: RoomID;
         let server_id: ServerID;
-        if existing.is_empty() {
+        if new_room {
             db_lock
                 .query(format!(
-                    "INSERT INTO rooms SET code={},server_id={}",
+                    "INSERT INTO rooms SET code={},player_count=1,server_id={}",
                     room_code,
                     get_server_id()
                 ))
@@ -128,6 +132,7 @@ fn find_room(room_code: RoomCode) -> impl Future<Item = (RoomID, ServerID), Erro
         } else {
             room_id = RoomID::from(existing[0].0);
             server_id = ServerID::from(existing[0].1);
+            db_lock.query(format!("UPDATE rooms SET player_count=player_count+1 WHERE id={}", room_id));
         }
         db_lock.query("UNLOCK TABLES").unwrap();
 
