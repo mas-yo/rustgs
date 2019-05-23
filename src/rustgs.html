@@ -6,7 +6,7 @@
 	</head>
 	<body>
 		<script>
-			var socket = new WebSocket("ws://127.0.0.1:18290");
+			var socket = new WebSocket("ws://192.168.32.243:18290");
 			socket.onmessage = function (event) {
 				var debug = document.getElementById("debug");
 				debug.value += "<- " + event.data + "\n";
