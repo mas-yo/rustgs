@@ -138,37 +138,42 @@ where
                 }
                 let messages = messages.clone();
                 let mut sender2 = sender.clone().wait();
-                let recv_msg = rx.for_each(move |cmd| {
-                    // println!("{:?}", cmd);
-                    match cmd {
-                        command::C2S::InputText(txt) => {
-                            let mut lock = messages.write().unwrap();
-                            lock.push_back(ChatMessage {
-                                name: name.clone(),
-                                message: txt.clone(),
-                            });
-                            if lock.len() > 100 {
-                                lock.pop_front();
-                            }
+                let recv_msg = rx
+                    .for_each(move |cmd| {
+                        // println!("{:?}", cmd);
+                        match cmd {
+                            command::C2S::InputText(txt) => {
+                                let mut lock = messages.write().unwrap();
+                                lock.push_back(ChatMessage {
+                                    name: name.clone(),
+                                    message: txt.clone(),
+                                });
+                                if lock.len() > 100 {
+                                    lock.pop_front();
+                                }
 
-                            let chat_txt = format!("{}: {}", name, txt);
-                            if let Err(e) = sender2.send((
-                                None,
-                                AsyncSendItem::SendData(command::S2C::AddText(
-                                    2001,
-                                    chat_txt.clone(),
-                                )),
-                            )) {
-                                println!("send text error {}", e);
+                                let chat_txt = format!("{}: {}", name, txt);
+                                if let Err(e) = sender2.send((
+                                    None,
+                                    AsyncSendItem::SendData(command::S2C::AddText(
+                                        2001,
+                                        chat_txt.clone(),
+                                    )),
+                                )) {
+                                    println!("send text error {}", e);
+                                }
                             }
+                            _ => {}
                         }
-                        _ => {}
-                    }
-                    Ok(())
-                }).and_then(move|_|{
-                    get_db().new_query(format!("UPDATE rooms SET player_count=player_count-1 WHERE id={}", room_id));
-                    Ok(())
-                });
+                        Ok(())
+                    })
+                    .and_then(move |_| {
+                        get_db().new_query(format!(
+                            "UPDATE rooms SET player_count=player_count-1 WHERE id={}",
+                            room_id
+                        ));
+                        Ok(())
+                    });
                 tokio::spawn(recv_msg.map_err(|_| ()));
             }
         }
@@ -246,7 +251,10 @@ where
                     }
                 }
                 Ok(Async::Ready(None)) => {
-                    get_db().new_query(format!("UPDATE rooms SET player_count=player_count-1 WHERE id={}", room_id));
+                    get_db().new_query(format!(
+                        "UPDATE rooms SET player_count=player_count-1 WHERE id={}",
+                        room_id
+                    ));
                     return false;
                 }
                 _ => {}

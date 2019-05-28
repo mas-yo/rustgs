@@ -28,15 +28,13 @@ impl Stream for WsPeer {
                 match msg {
                     OwnedMessage::Text(txt) => {
                         Ok(Async::Ready(Some(command::C2S::from_str(&txt).unwrap())))
-                    },
-                    OwnedMessage::Close(_) => {
-                        Ok(Async::Ready(None))
-                    },
+                    }
+                    OwnedMessage::Close(_) => Ok(Async::Ready(None)),
                     OwnedMessage::Ping(data) => {
                         // self.framed.start_send(OwnedMessage::Pong(data)); TODO
                         Ok(Async::NotReady)
-                    },
-                    _ => Err(WebSocketError::ProtocolError("invalid data type"))
+                    }
+                    _ => Err(WebSocketError::ProtocolError("invalid data type")),
                 }
                 // if let OwnedMessage::Text(txt) = msg {
                 //     return Ok(Async::Ready(Some(command::C2S::from_str(&txt).unwrap())));

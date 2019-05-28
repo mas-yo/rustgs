@@ -275,20 +275,19 @@ fn make_websocket_server(
             make_websocket_listener(&addr).for_each(move |peer| {
                 let sync_mode = sync_mode.clone();
                 // make_websocket_listener(&addr).for_each(|peer| {
-                let top =
-                    top(peer)
-                        .and_then(move |(peer, user_id, name, opt_room_code)| {
-                            let mut room_code = RoomCode::from(1);
-                            match opt_room_code {
-                                Some(code) => {
-                                    println!("login ok {},{}", user_id, code);
-                                    room_code = code;
-                                }
-                                None => {
-                                    println!("login ok {}", user_id);
-                                }
+                let top = top(peer)
+                    .and_then(move |(peer, user_id, name, opt_room_code)| {
+                        let mut room_code = RoomCode::from(1);
+                        match opt_room_code {
+                            Some(code) => {
+                                println!("login ok {},{}", user_id, code);
+                                room_code = code;
                             }
-                            find_room(room_code).and_then(move |(room_id, server_id)| {
+                            None => {
+                                println!("login ok {}", user_id);
+                            }
+                        }
+                        find_room(room_code).and_then(move |(room_id, server_id)| {
                                 println!("room id:{} server_id:{}", room_id, server_id);
 
                                 let join_command = room_command::RoomCommand::Join((peer, name));
@@ -324,8 +323,8 @@ fn make_websocket_server(
                                     Ok(())
                                 }
                             })
-                        })
-                        .map(|_| ());
+                    })
+                    .map(|_| ());
                 tokio::spawn(top);
                 Ok(())
             })
