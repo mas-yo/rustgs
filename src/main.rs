@@ -335,12 +335,12 @@ fn make_websocket_server(
 
 #[cfg(feature = "protocol_ws")]
 fn make_server(addr: SocketAddr, sync_mode: String) -> impl Future<Item = (), Error = ()> {
-    println!("websocket server");
+    println!("websocket server mode:{}", sync_mode);
     make_websocket_server(addr, sync_mode)
 }
 #[cfg(feature = "protocol_tcp")]
 fn make_server(addr: SocketAddr, sync_mode: String) -> impl Future<Item = (), Error = ()> {
-    println!("tcp server");
+    println!("tcp server mode:{}", sync_mode);
     make_tcp_server(addr, sync_mode)
 }
 

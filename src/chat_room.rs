@@ -165,6 +165,9 @@ where
                         _ => {}
                     }
                     Ok(())
+                }).and_then(move|_|{
+                    get_db().new_query(format!("UPDATE rooms SET player_count=player_count-1 WHERE id={}", room_id));
+                    Ok(())
                 });
                 tokio::spawn(recv_msg.map_err(|_| ()));
             }
