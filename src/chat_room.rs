@@ -167,14 +167,17 @@ where
                         }
                         Ok(())
                     })
-                    .and_then(move |_| {
+                    .map_err(move|e| {
+                        println!("recv error {}", e)
+                    })
+                    .then(move |_| {
                         get_db().new_query(format!(
                             "UPDATE rooms SET player_count=player_count-1 WHERE id={}",
                             room_id
                         ));
                         Ok(())
                     });
-                tokio::spawn(recv_msg.map_err(|_| ()));
+                tokio::spawn(recv_msg);
             }
         }
         Ok(())
@@ -242,13 +245,15 @@ where
                         messages.pop_front();
                     }
 
-                    for (_, tx) in peer_txs.iter_mut() {
+                    peer_txs.retain(|_, tx|{
                         let text = format!("{}: {}", name, msg);
                         // println!("sending {}", text.len());
-                        if tx.send(command::S2C::AddText(2001, text)).wait().is_err() {
-                            println!("send error");
+                        if let Err(e) = tx.send(command::S2C::AddText(2001, text)).wait() {
+                            // println!("send error {}", e);
+                            return false;
                         }
-                    }
+                        true
+                    });
                 }
                 Ok(Async::Ready(None)) => {
                     get_db().new_query(format!(
@@ -256,13 +261,21 @@ where
                         room_id
                     ));
                     return false;
-                }
+                },
+                Err(e) => {
+                    println!("recv error {}", e);
+                    get_db().new_query(format!(
+                        "UPDATE rooms SET player_count=player_count-1 WHERE id={}",
+                        room_id
+                    ));
+                    return false;
+                },
                 _ => {}
             }
             true
         });
 
-        if room_started && peer_rxs.len() == 0 {
+        if room_started && peer_rxs.len() == 0 && peer_txs.len() == 0 {
             println!("room id {} closed", room_id);
             Ok(false)
         } else {
