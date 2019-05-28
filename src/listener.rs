@@ -25,11 +25,24 @@ impl Stream for WsPeer {
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         match self.framed.poll() {
             Ok(Async::Ready(Some(msg))) => {
-                if let OwnedMessage::Text(txt) = msg {
-                    return Ok(Async::Ready(Some(command::C2S::from_str(&txt).unwrap())));
-                } else {
-                    Err(WebSocketError::ProtocolError("invalid data type"))
+                match msg {
+                    OwnedMessage::Text(txt) => {
+                        Ok(Async::Ready(Some(command::C2S::from_str(&txt).unwrap())))
+                    },
+                    OwnedMessage::Close(_) => {
+                        Ok(Async::Ready(None))
+                    },
+                    OwnedMessage::Ping(data) => {
+                        // self.framed.start_send(OwnedMessage::Pong(data)); TODO
+                        Ok(Async::NotReady)
+                    },
+                    _ => Err(WebSocketError::ProtocolError("invalid data type"))
                 }
+                // if let OwnedMessage::Text(txt) = msg {
+                //     return Ok(Async::Ready(Some(command::C2S::from_str(&txt).unwrap())));
+                // } else {
+                //     Err(WebSocketError::ProtocolError("invalid data type"))
+                // }
             }
             Ok(Async::Ready(None)) => Ok(Async::Ready(None)),
             Ok(Async::NotReady) => Ok(Async::NotReady),
