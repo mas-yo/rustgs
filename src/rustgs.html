@@ -41,6 +41,9 @@
 				debug.value += "-> " + text + "\n";
 				socket.send(text)
 			}
+			function close_socket() {
+				socket.close();
+			}
         </script>
         
 		<div id="1" onclick='on_click(this)' style='display:none; background-color:#f2c78c;'>
@@ -67,6 +70,7 @@
 		<br/>
 		DEBUG:<br/>
 		<textarea id="debug" rows=20 cols=120 style='background-color:#c6c0c0;'></textarea>
+		<button onclick='close_socket()'>close</button>
 		<!-- <form onsubmit="send('message'); return false">
 			<input type="text" id="message">
 			<input type="submit" value="Send">
