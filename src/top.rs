@@ -15,7 +15,10 @@ where
     E: Display + Debug,
 {
     show_title(peer)
-        .and_then(move |peer| peer.send(command::S2C::RequestLoginInfo).map_err(|_| ()))
+        .and_then(move |peer| {
+            peer.send(command::S2C::RequestLoginInfo)
+                .map_err(|e| println!("top error {}", e))
+        })
         .and_then(move |peer| wait_login_info(peer))
         .and_then(move |(name, peer)| {
             login(&name).map(|(user_id, room_code)| (peer, user_id, name, room_code))
@@ -88,7 +91,7 @@ where
             })
             .and_then(move |peer| peer.send(command::S2C::ShowUI(1, false)))
         })
-        .map_err(|_| ())
+        .map_err(|e| println!("show title error {}", e))
 }
 
 fn wait_login_info<S, E>(peer: S) -> impl Future<Item = (String, S), Error = ()>
@@ -103,7 +106,7 @@ where
         _ => Ok(true),
     })
     .into_future()
-    .map_err(|_| ())
+    .map_err(|_| println!("wait login info error "))
     .and_then(|(cmd, skipwhile)| {
         if let Some(command::C2S::ResponseLoginInfo(name)) = cmd {
             Ok((name, skipwhile.into_inner()))

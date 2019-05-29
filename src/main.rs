@@ -104,7 +104,7 @@ fn find_room(room_code: RoomCode) -> impl Future<Item = (RoomID, ServerID), Erro
 
         let mut new_room = false;
         if existing.is_empty() { new_room = true; }
-        else if existing[0].2 >= 10 { new_room = true; }
+        else if existing[0].2 >= 200 { new_room = true; }
 
         let room_id: RoomID;
         let server_id: ServerID;
@@ -354,18 +354,22 @@ fn main() {
     let addr = SocketAddr::from_str(&format!("{}:18290", args[1])).unwrap();
     let sync_mode = args[2].clone();
 
-    let delete_room = Ok(()).into_future().and_then(|_|{
+    sync_db().write().unwrap().query("TRUNCATE rooms");
+
+    let delete_room = Ok(()).into_future().and_then(|_| {
         let task = tokio::timer::Interval::new(
             std::time::Instant::now(),
             std::time::Duration::from_secs(10),
-        ).for_each(|_|{
+        )
+        .for_each(|_| {
             get_db().new_query("DELETE FROM rooms WHERE player_count=0");
             Ok(())
-        }).map_err(|_|());
+        })
+        .map_err(|e| println!("delete room error {}", e));
         tokio::spawn(task);
         Ok(())
     });
-    let server = delete_room.and_then(move|_| make_server(addr, sync_mode) );
+    let server = delete_room.and_then(move |_| make_server(addr, sync_mode));
     tokio::run(server);
 }
 

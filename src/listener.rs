@@ -72,13 +72,16 @@ pub(crate) fn make_websocket_listener(addr: &SocketAddr) -> impl Stream<Item = W
     let handle = tokio::reactor::Handle::current();
     let server = Server::bind(addr, &handle).unwrap();
 
-    server.incoming().map_err(|_| ()).map(move |(upgrade, _)| {
-        upgrade
-            .accept()
-            .wait()
-            .map(|(socket, _)| WsPeer { framed: socket })
-            .unwrap() //TODO
-    })
+    server
+        .incoming()
+        .map_err(|_| println!("ws incoming error"))
+        .map(move |(upgrade, _)| {
+            upgrade
+                .accept()
+                .wait()
+                .map(|(socket, _)| WsPeer { framed: socket })
+                .unwrap() //TODO
+        })
 }
 
 pub(crate) fn make_tcpsocket_listener<Codec>(
@@ -93,6 +96,6 @@ where
 
     listener
         .incoming()
-        .map_err(|_| ())
+        .map_err(|_| println!("tcp incoming error"))
         .map(move |socket| Framed::new(socket, Codec::default()))
 }

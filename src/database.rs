@@ -39,7 +39,11 @@ pub fn start_database() -> (impl Future<Item = (), Error = ()>, DBQuerySender) {
                 // println!("selected value:{}", value);
                 // let result = vec![value];
                 let row = row.unwrap();
-                let send_task = result_tx.clone().send(row).map(|_| ()).map_err(|_| ());
+                let send_task = result_tx
+                    .clone()
+                    .send(row)
+                    .map(|_| ())
+                    .map_err(|e| println!("query error {}", e));
                 tokio::spawn(send_task);
             }
         }
@@ -77,7 +81,7 @@ impl NewQuery for DBQuerySender {
             .clone()
             .send((queries, result_tx))
             .map(|_| ())
-            .map_err(|_| ());
+            .map_err(|e| println!("new query multi error {}", e));
         tokio::spawn(query_task);
         result_rx
     }

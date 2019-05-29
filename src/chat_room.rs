@@ -87,7 +87,9 @@ where
         Ok(())
     });
 
-    tokio::spawn(task.map_err(|_| ()));
+    tokio::spawn(task.map_err(|e| {
+        println!("async send error {:?}", e);
+    }));
 
     tx
 }
@@ -167,9 +169,7 @@ where
                         }
                         Ok(())
                     })
-                    .map_err(move|e| {
-                        println!("recv error {}", e)
-                    })
+                    .map_err(move |e| println!("recv error {}", e))
                     .then(move |_| {
                         get_db().new_query(format!(
                             "UPDATE rooms SET player_count=player_count-1 WHERE id={}",
@@ -207,83 +207,91 @@ where
     let mut peer_rxs = HashMap::new();
     let mut room_started = false;
 
-    let room = tokio::timer::Interval::new(
-        std::time::Instant::now(),
-        std::time::Duration::from_millis(1),
-    )
-    .skip_while(move |_| {
-        match room_rx.try_recv() {
-            Ok(RoomCommand::Join((peer, name))) => {
-                println!("room id:{} peer:{} joined", room_id, next_peer_id);
-                let (tx, rx) = peer.split();
-                let tx = tx.send(command::S2C::ShowUI(2, true)).wait().unwrap();
+    let room = Ok(()).into_future().and_then(move |_| {
+        loop {
+            // std::thread::sleep(std::time::Duration::from_millis(100));
 
-                let mut opt_tx = Some(tx);
-                for msg in messages.iter() {
-                    let text = format!("{}: {}", msg.name, msg.message);
-                    let tx = opt_tx.take().unwrap();
-                    opt_tx = Some(tx.send(command::S2C::AddText(2001, text)).wait().unwrap());
-                }
-                let tx = opt_tx.take().unwrap();
-
-                peer_txs.insert(next_peer_id, tx);
-                peer_rxs.insert(next_peer_id, (rx, name));
-                next_peer_id += 1;
-                room_started = true;
-            }
-            _ => {}
-        }
-
-        peer_rxs.retain(|_, (rx, name)| {
-            match rx.poll() {
-                Ok(Async::Ready(Some(command::C2S::InputText(msg)))) => {
-                    messages.push_back(ChatMessage {
-                        name: name.clone(),
-                        message: msg.clone(),
-                    });
-                    if messages.len() > 100 {
-                        messages.pop_front();
+            match room_rx.try_recv() {
+                Ok(RoomCommand::Join((peer, name))) => {
+                    println!("room id:{} peer:{} joined", room_id, next_peer_id);
+                    let (tx, rx) = peer.split();
+                    let mut tx = tx.wait();
+                    tx.send(command::S2C::ShowUI(2, true)).unwrap();
+                    if let Err(e) = tx.flush() {
+                        println!("flush error 1 {}", e);
                     }
 
-                    peer_txs.retain(|_, tx|{
-                        let text = format!("{}: {}", name, msg);
-                        // println!("sending {}", text.len());
-                        if let Err(e) = tx.send(command::S2C::AddText(2001, text)).wait() {
-                            // println!("send error {}", e);
-                            return false;
+                    // let mut opt_tx = Some(tx);
+                    for msg in messages.iter() {
+                        let text = format!("{}: {}", msg.name, msg.message);
+                        // let tx = opt_tx.take().unwrap();
+                        tx.send(command::S2C::AddText(2001, text)).unwrap();
+                        if let Err(e) = tx.flush() {
+                            println!("flush error 2 {}", e);
                         }
-                        true
-                    });
+                    }
+                    // let tx = opt_tx.take().unwrap();
+
+                    peer_txs.insert(next_peer_id, tx);
+                    peer_rxs.insert(next_peer_id, (rx, name));
+                    next_peer_id += 1;
+                    room_started = true;
                 }
-                Ok(Async::Ready(None)) => {
-                    get_db().new_query(format!(
-                        "UPDATE rooms SET player_count=player_count-1 WHERE id={}",
-                        room_id
-                    ));
-                    return false;
-                },
-                Err(e) => {
-                    println!("recv error {}", e);
-                    get_db().new_query(format!(
-                        "UPDATE rooms SET player_count=player_count-1 WHERE id={}",
-                        room_id
-                    ));
-                    return false;
-                },
                 _ => {}
             }
-            true
-        });
 
-        if room_started && peer_rxs.len() == 0 && peer_txs.len() == 0 {
-            println!("room id {} closed", room_id);
-            Ok(false)
-        } else {
-            Ok(true)
+            peer_rxs.retain(|_, (rx, name)| {
+                match rx.poll() {
+                    Ok(Async::Ready(Some(command::C2S::InputText(msg)))) => {
+                        messages.push_back(ChatMessage {
+                            name: name.clone(),
+                            message: msg.clone(),
+                        });
+                        if messages.len() > 100 {
+                            messages.pop_front();
+                        }
+
+                        peer_txs.retain(|_, tx| {
+                            let text = format!("{}: {}", name, msg);
+                            // println!("sending {}", text.len());
+                            if let Err(e) = tx.send(command::S2C::AddText(2001, text)) {
+                                println!("send error {}", e);
+                                return false;
+                            }
+                            if let Err(e) = tx.flush() {
+                                // println!("flush error 3 {}", e);
+                                return false;
+                            }
+                            true
+                        });
+                    }
+                    Ok(Async::Ready(None)) => {
+                        get_db().new_query(format!(
+                            "UPDATE rooms SET player_count=player_count-1 WHERE id={}",
+                            room_id
+                        ));
+                        return false;
+                    }
+                    Err(e) => {
+                        println!("recv error {}", e);
+                        get_db().new_query(format!(
+                            "UPDATE rooms SET player_count=player_count-1 WHERE id={}",
+                            room_id
+                        ));
+                        return false;
+                    }
+                    _ => {}
+                }
+                true
+            });
+
+            if room_started && peer_rxs.len() == 0 { //&& peer_txs.len() == 0 {
+                println!("room id {} closed", room_id);
+                break;
+            }
         }
-    })
-    .for_each(|_| Ok(()))
-    .map_err(|_| ());
+        Ok(())
+    });
 
     tokio::spawn(room);
 

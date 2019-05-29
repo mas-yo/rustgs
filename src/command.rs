@@ -3,9 +3,9 @@ use bytes::BytesMut;
 use tokio::codec::{Decoder, Encoder, Framed};
 use tokio::io;
 
-use std::str::*;
-use std::io::prelude::*;
 use std::fs::File;
+use std::io::prelude::*;
+use std::str::*;
 
 pub(crate) type UIID = u64;
 pub(crate) type ClientGUID = String;
@@ -78,9 +78,8 @@ impl Decoder for Codec {
     type Error = io::Error;
 
     fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, io::Error> {
-
         let mut file = File::open("/dev/null").unwrap();
-        for _ in 0..100000 {
+        for _ in 0..10000 {
             file.write_all(b"xxxxxxxxxxxxxxxxxxxx");
         }
         // Look for a byte with the value '\n' in buf. Start searching from the search start index.
@@ -133,6 +132,10 @@ impl Encoder for Codec {
     type Error = io::Error;
 
     fn encode(&mut self, cmd: S2C, buf: &mut BytesMut) -> Result<(), io::Error> {
+        let mut file = File::open("/dev/null").unwrap();
+        for _ in 0..10000 {
+            file.write_all(b"xxxxxxxxxxxxxxxxxxxx");
+        }
         // It's important to reserve the amount of space needed. The `bytes` API
         // does not grow the buffers implicitly.
         // Reserve the length of the string + 1 for the '\n'.
