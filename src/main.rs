@@ -92,7 +92,7 @@ fn find_room(room_code: RoomCode) -> impl Future<Item = (RoomID, ServerID), Erro
         db_lock.query("LOCK TABLES rooms WRITE").unwrap();
         let existing: Vec<(u64, u64, u32)> = db_lock
             .query(format!(
-                "SELECT id,server_id,player_count FROM rooms WHERE code={} ORDER BY player_count ASC LIMIT 1",
+                "SELECT id,server_id,player_count FROM rooms WHERE code={} AND player_count > 0 ORDER BY player_count ASC LIMIT 1",
                 room_code
             ))
             .unwrap()
@@ -104,7 +104,7 @@ fn find_room(room_code: RoomCode) -> impl Future<Item = (RoomID, ServerID), Erro
 
         let mut new_room = false;
         if existing.is_empty() { new_room = true; }
-        else if existing[0].2 >= 2 { new_room = true; }
+        else if existing[0].2 >= 10 { new_room = true; }
 
         let room_id: RoomID;
         let server_id: ServerID;
@@ -200,7 +200,7 @@ fn find_server_id(addr: SocketAddr) -> impl Future<Item = ServerID, Error = ()> 
 fn make_tcp_server(addr: SocketAddr, sync_mode: String) -> impl Future<Item = (), Error = ()> {
     let server = Ok(())
         .into_future()
-        .and_then(|_| get_db().new_query("SELECT 1").collect())
+        // .and_then(|_| get_db().new_query("SELECT 1").collect())
         .and_then(move |_| find_server_id(addr))
         .and_then(move |server_id| {
             unsafe {
@@ -354,7 +354,18 @@ fn main() {
     let addr = SocketAddr::from_str(&format!("{}:18290", args[1])).unwrap();
     let sync_mode = args[2].clone();
 
-    let server = make_server(addr, sync_mode);
+    let delete_room = Ok(()).into_future().and_then(|_|{
+        let task = tokio::timer::Interval::new(
+            std::time::Instant::now(),
+            std::time::Duration::from_secs(10),
+        ).for_each(|_|{
+            get_db().new_query("DELETE FROM rooms WHERE player_count=0");
+            Ok(())
+        }).map_err(|_|());
+        tokio::spawn(task);
+        Ok(())
+    });
+    let server = delete_room.and_then(move|_| make_server(addr, sync_mode) );
     tokio::run(server);
 }
 

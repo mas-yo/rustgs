@@ -61,7 +61,7 @@ where
     S::SinkError: Debug,
 {
     let mut peers_tx = HashMap::new();
-    let (tx, rx) = futures::sync::mpsc::channel::<(Option<PeerID>, AsyncSendItem<S, I>)>(32);
+    let (tx, rx) = futures::sync::mpsc::channel::<(Option<PeerID>, AsyncSendItem<S, I>)>(1024);
     let task = rx.for_each(move |(peer_id, item)| {
         match item {
             AsyncSendItem::Peer(peer) => {
@@ -100,7 +100,7 @@ where
         + Send,
     E: 'static + Display + Debug + Send,
 {
-    let (room_tx, room_rx) = futures::sync::mpsc::channel::<RoomCommand<S, E>>(12);
+    let (room_tx, room_rx) = futures::sync::mpsc::channel::<RoomCommand<S, E>>(1024);
     let messages = Arc::new(RwLock::new(VecDeque::<ChatMessage>::new()));
 
     let sender = async_sender();
@@ -199,7 +199,7 @@ where
 {
     let mut messages = VecDeque::<ChatMessage>::new();
 
-    let (room_tx, room_rx) = std::sync::mpsc::sync_channel::<RoomCommand<S, E>>(12);
+    let (room_tx, room_rx) = std::sync::mpsc::sync_channel::<RoomCommand<S, E>>(1024);
     //    rooms.insert(room_id, room_tx.clone());
 
     let mut next_peer_id = 0;
