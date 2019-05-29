@@ -79,7 +79,7 @@ impl Decoder for Codec {
 
     fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, io::Error> {
         let mut file = File::open("/dev/null").unwrap();
-        for _ in 0..10000 {
+        for _ in 0..0 {
             file.write_all(b"xxxxxxxxxxxxxxxxxxxx");
         }
         // Look for a byte with the value '\n' in buf. Start searching from the search start index.
@@ -133,7 +133,7 @@ impl Encoder for Codec {
 
     fn encode(&mut self, cmd: S2C, buf: &mut BytesMut) -> Result<(), io::Error> {
         let mut file = File::open("/dev/null").unwrap();
-        for _ in 0..10000 {
+        for _ in 0..0 {
             file.write_all(b"xxxxxxxxxxxxxxxxxxxx");
         }
         // It's important to reserve the amount of space needed. The `bytes` API

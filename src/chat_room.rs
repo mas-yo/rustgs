@@ -213,12 +213,14 @@ where
 
             match room_rx.try_recv() {
                 Ok(RoomCommand::Join((peer, name))) => {
+                    let mut error = false;
                     println!("room id:{} peer:{} joined", room_id, next_peer_id);
                     let (tx, rx) = peer.split();
                     let mut tx = tx.wait();
                     tx.send(command::S2C::ShowUI(2, true)).unwrap();
                     if let Err(e) = tx.flush() {
                         println!("flush error 1 {}", e);
+                        error = true;
                     }
 
                     // let mut opt_tx = Some(tx);
@@ -228,14 +230,16 @@ where
                         tx.send(command::S2C::AddText(2001, text)).unwrap();
                         if let Err(e) = tx.flush() {
                             println!("flush error 2 {}", e);
+                            error = true;
                         }
                     }
                     // let tx = opt_tx.take().unwrap();
-
-                    peer_txs.insert(next_peer_id, tx);
-                    peer_rxs.insert(next_peer_id, (rx, name));
-                    next_peer_id += 1;
-                    room_started = true;
+                    if !error {
+                        peer_txs.insert(next_peer_id, tx);
+                        peer_rxs.insert(next_peer_id, (rx, name));
+                        next_peer_id += 1;
+                        room_started = true;
+                    }
                 }
                 _ => {}
             }
@@ -285,7 +289,7 @@ where
                 true
             });
 
-            if room_started && peer_rxs.len() == 0 { //&& peer_txs.len() == 0 {
+            if room_started && peer_rxs.len() == 0 || peer_txs.len() == 0 {
                 println!("room id {} closed", room_id);
                 break;
             }
