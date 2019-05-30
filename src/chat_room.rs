@@ -293,7 +293,7 @@ where
                             room_id
                         ));
                         return false;
-                    },
+                    }
                     Ok(Async::NotReady) => {
                         // println!("not ready");
                         not_ready_count += 1;
@@ -305,7 +305,7 @@ where
                             ));
                             return false;
                         }
-                    },
+                    }
                     Err(e) => {
                         println!("recv error {}", e);
                         get_db().new_query(format!(
