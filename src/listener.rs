@@ -96,6 +96,12 @@ where
 
     listener
         .incoming()
+        .and_then(|socket|{
+            socket.set_nodelay(true);
+            Ok(socket)
+        })
         .map_err(|_| println!("tcp incoming error"))
-        .map(move |socket| Framed::new(socket, Codec::default()))
+        .map(move |socket|{
+             Framed::new(socket, Codec::default())
+        })
 }

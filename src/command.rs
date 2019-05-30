@@ -78,9 +78,10 @@ impl Decoder for Codec {
     type Error = io::Error;
 
     fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, io::Error> {
-        let mut file = File::open("/dev/null").unwrap();
-        for _ in 0..0 {
-            file.write_all(b"xxxxxxxxxxxxxxxxxxxx");
+        // let mut file = File::open("/dev/null").unwrap();
+        let mut load = 0;
+        for i in 0..0 {
+            load = load + 1;
         }
         // Look for a byte with the value '\n' in buf. Start searching from the search start index.
         if let Some(newline_offset) = buf[self.next_index..].iter().position(|b| *b == b'\n') {
@@ -132,9 +133,10 @@ impl Encoder for Codec {
     type Error = io::Error;
 
     fn encode(&mut self, cmd: S2C, buf: &mut BytesMut) -> Result<(), io::Error> {
-        let mut file = File::open("/dev/null").unwrap();
-        for _ in 0..0 {
-            file.write_all(b"xxxxxxxxxxxxxxxxxxxx");
+        // let mut file = File::open("/dev/null").unwrap();
+        let mut load = 0;
+        for i in 0..0 {
+            load = load + 1;
         }
         // It's important to reserve the amount of space needed. The `bytes` API
         // does not grow the buffers implicitly.

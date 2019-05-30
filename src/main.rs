@@ -87,6 +87,7 @@ fn new_room(room_code: RoomCode) -> impl Future<Item = RoomID, Error = ()> {
 
 fn find_room(room_code: RoomCode) -> impl Future<Item = (RoomID, ServerID), Error = ()> {
     Ok(()).into_future().and_then(move |_| {
+        println!("find_room");
         let db = sync_db();
         let mut db_lock = db.write().unwrap();
         db_lock.query("LOCK TABLES rooms WRITE").unwrap();
@@ -160,6 +161,7 @@ where
 
 fn find_server_id(addr: SocketAddr) -> impl Future<Item = ServerID, Error = ()> {
     Ok(()).into_future().and_then(move |_| {
+        println!("find server id");
         let db = sync_db();
         let mut db_lock = db.write().unwrap();
         db_lock.query("LOCK TABLES servers WRITE").unwrap();
@@ -235,7 +237,10 @@ fn make_tcp_server(addr: SocketAddr, sync_mode: String) -> impl Future<Item = ()
                                     room_tx = chat_room::<TcpPeer, std::io::Error>(room_id);
                                     rooms.insert(room_id, room_tx.clone());
                                 }
-                                room_tx.send(join_command);
+                                if let Err(e) = room_tx.send(join_command) {
+                                    println!("room send error {}", e);
+                                    rooms.remove(&room_id);
+                                }
                                 Ok(())
                             } else {
                                 let mut rooms = ROOMS_TCP_ASYNC.write().unwrap();
@@ -247,7 +252,10 @@ fn make_tcp_server(addr: SocketAddr, sync_mode: String) -> impl Future<Item = ()
                                     room_tx = chat_room_async::<TcpPeer, std::io::Error>(room_id);
                                     rooms.insert(room_id, room_tx.clone());
                                 }
-                                room_tx.send(join_command).wait();
+                                if let Err(e) = room_tx.send(join_command).wait() {
+                                    println!("room send error {}", e);
+                                    rooms.remove(&room_id);
+                                }
                                 Ok(())
                             }
                         })
@@ -304,7 +312,10 @@ fn make_websocket_server(
                                         >(room_id);
                                         rooms.insert(room_id, room_tx.clone());
                                     }
-                                    room_tx.send(join_command);
+                                    if let Err(e) = room_tx.send(join_command) {
+                                        println!("room send err {}", e);
+                                        rooms.remove(&room_id);
+                                    }
                                     Ok(())
                                 } else {
                                     let mut rooms = ROOMS_WS_ASYNC.write().unwrap();
@@ -319,12 +330,14 @@ fn make_websocket_server(
                                         >(room_id);
                                         rooms.insert(room_id, room_tx.clone());
                                     }
-                                    room_tx.send(join_command).wait();
+                                    if let Err(e) = room_tx.send(join_command).wait() {
+                                        rooms.remove(&room_id);
+                                    }
                                     Ok(())
                                 }
                             })
                     })
-                    .map(|_| ());
+                    .map(|_| println!("top error"));
                 tokio::spawn(top);
                 Ok(())
             })

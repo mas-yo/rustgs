@@ -79,7 +79,10 @@ where
                         // println!("send err! {:?}", e);
                         return false;
                     }
-                    tx.flush();
+                    if let Err(_) = tx.flush() {
+                        println!("flush err");
+                        return false;
+                    }
                     true
                 });
             }
@@ -209,7 +212,7 @@ where
 
     let room = Ok(()).into_future().and_then(move |_| {
         loop {
-            // std::thread::sleep(std::time::Duration::from_millis(100));
+            std::thread::sleep(std::time::Duration::from_millis(100));
 
             match room_rx.try_recv() {
                 Ok(RoomCommand::Join((peer, name))) => {
@@ -217,7 +220,10 @@ where
                     println!("room id:{} peer:{} joined", room_id, next_peer_id);
                     let (tx, rx) = peer.split();
                     let mut tx = tx.wait();
-                    tx.send(command::S2C::ShowUI(2, true)).unwrap();
+                    if let Err(e) = tx.send(command::S2C::ShowUI(2, true)) {
+                        println!("send error 1 {}", e);
+                        error = true;
+                    };
                     if let Err(e) = tx.flush() {
                         println!("flush error 1 {}", e);
                         error = true;
@@ -227,7 +233,11 @@ where
                     for msg in messages.iter() {
                         let text = format!("{}: {}", msg.name, msg.message);
                         // let tx = opt_tx.take().unwrap();
-                        tx.send(command::S2C::AddText(2001, text)).unwrap();
+                        println!("sending {}", text);
+                        if let Err(e) = tx.send(command::S2C::AddText(2001, text)) {
+                            println!("send error 2 {}", e);
+                            error = true;
+                        }
                         if let Err(e) = tx.flush() {
                             println!("flush error 2 {}", e);
                             error = true;
@@ -239,6 +249,11 @@ where
                         peer_rxs.insert(next_peer_id, (rx, name));
                         next_peer_id += 1;
                         room_started = true;
+                    } else {
+                        get_db().new_query(format!(
+                            "UPDATE rooms SET player_count=player_count-1 WHERE id={}",
+                            room_id
+                        ));
                     }
                 }
                 _ => {}
@@ -255,17 +270,19 @@ where
                             messages.pop_front();
                         }
 
+                        println!("recv {}", msg);
+
                         peer_txs.retain(|_, tx| {
                             let text = format!("{}: {}", name, msg);
-                            // println!("sending {}", text.len());
-                            if let Err(e) = tx.send(command::S2C::AddText(2001, text)) {
+                            if let Err(e) = tx.send(command::S2C::AddText(2001, text.clone())) {
                                 println!("send error {}", e);
                                 return false;
                             }
                             if let Err(e) = tx.flush() {
-                                // println!("flush error 3 {}", e);
+                                println!("flush error 3 {}", e);
                                 return false;
                             }
+                            println!("send {}", text);
                             true
                         });
                     }
@@ -275,7 +292,10 @@ where
                             room_id
                         ));
                         return false;
-                    }
+                    },
+                    Ok(Async::NotReady) => {
+                        // println!("not ready");
+                    },
                     Err(e) => {
                         println!("recv error {}", e);
                         get_db().new_query(format!(
@@ -284,7 +304,9 @@ where
                         ));
                         return false;
                     }
-                    _ => {}
+                    _ => {
+                        println!("unexpected command");
+                    }
                 }
                 true
             });
