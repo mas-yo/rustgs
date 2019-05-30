@@ -211,8 +211,9 @@ where
     let mut room_started = false;
 
     let room = Ok(()).into_future().and_then(move |_| {
+        let mut not_ready_count = 0;
         loop {
-            std::thread::sleep(std::time::Duration::from_millis(100));
+            // std::thread::sleep(std::time::Duration::from_millis(100));
 
             match room_rx.try_recv() {
                 Ok(RoomCommand::Join((peer, name))) => {
@@ -295,6 +296,15 @@ where
                     },
                     Ok(Async::NotReady) => {
                         // println!("not ready");
+                        not_ready_count += 1;
+                        if not_ready_count > 1000000 {
+                            println!("NOT READY");
+                            get_db().new_query(format!(
+                                "UPDATE rooms SET player_count=0 WHERE id={}",
+                                room_id
+                            ));
+                            return false;
+                        }
                     },
                     Err(e) => {
                         println!("recv error {}", e);

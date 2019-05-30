@@ -9,7 +9,7 @@ protocol_ws = []
 protocol_tcp = []
 
 [dependencies]
-tokio = "0.1.14"
+tokio = "0.1.20"
 futures = "0.1.25"
 #futures-preview = "0.2.2"
 bytes = "0.4.11"

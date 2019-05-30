@@ -105,7 +105,7 @@ fn find_room(room_code: RoomCode) -> impl Future<Item = (RoomID, ServerID), Erro
 
         let mut new_room = false;
         if existing.is_empty() { new_room = true; }
-        else if existing[0].2 >= 200 { new_room = true; }
+        else if existing[0].2 >= 10 { new_room = true; }
 
         let room_id: RoomID;
         let server_id: ServerID;
