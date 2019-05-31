@@ -234,7 +234,7 @@ where
                     for msg in messages.iter() {
                         let text = format!("{}: {}", msg.name, msg.message);
                         // let tx = opt_tx.take().unwrap();
-                        println!("sending {}", text);
+                        // println!("sending {}", text);
                         if let Err(e) = tx.send(command::S2C::AddText(2001, text)) {
                             println!("send error 2 {}", e);
                             error = true;
@@ -271,7 +271,7 @@ where
                             messages.pop_front();
                         }
 
-                        println!("recv {}", msg);
+                        // println!("recv {}", msg);
 
                         peer_txs.retain(|_, tx| {
                             let text = format!("{}: {}", name, msg);
@@ -283,7 +283,7 @@ where
                                 println!("flush error 3 {}", e);
                                 return false;
                             }
-                            println!("send {}", text);
+                            // println!("send {}", text);
                             true
                         });
                     }
@@ -297,14 +297,14 @@ where
                     Ok(Async::NotReady) => {
                         // println!("not ready");
                         not_ready_count += 1;
-                        if not_ready_count > 1000000 {
-                            println!("NOT READY");
-                            get_db().new_query(format!(
-                                "UPDATE rooms SET player_count=0 WHERE id={}",
-                                room_id
-                            ));
-                            return false;
-                        }
+                        // if not_ready_count > 1000000 {
+                        //     println!("NOT READY");
+                        //     get_db().new_query(format!(
+                        //         "UPDATE rooms SET player_count=0 WHERE id={}",
+                        //         room_id
+                        //     ));
+                        //     return false;
+                        // }
                     }
                     Err(e) => {
                         println!("recv error {}", e);
